@@ -1,0 +1,67 @@
+{
+ "output": "out/jsac_cost",
+ "preset": "jsac",
+ "panels": [
+  {
+   "type": "line",
+   "caption": "(a)",
+   "data": "data.csv",
+   "x": {
+    "col": "requests",
+    "title": "Number of QKD chain requests",
+    "step": 4,
+    "first": 2
+   },
+   "y": {
+    "title": "Deployment cost (units)"
+   },
+   "matrix": {
+    "names": [
+     "ILP",
+     "CO-QBN",
+     "RANDOM"
+    ],
+    "groups": [
+     "eta1",
+     "eta2"
+    ],
+    "col": "{name}|{group}",
+    "label": {
+     "eta1": "\\i(η)\\-(r) = 1",
+     "eta2": "\\i(η)\\-(r) ∈ [1, 2]"
+    },
+    "style": {
+     "ILP": {
+      "line": false
+     },
+     "RANDOM": {
+      "shape": "none"
+     }
+    }
+   },
+   "marks": [
+    {
+     "type": "bracket",
+     "style": "arrow",
+     "x": 15,
+     "y": [
+      600000,
+      1620000
+     ],
+     "text": "60%",
+     "side": "left"
+    },
+    {
+     "type": "bracket",
+     "style": "arrow",
+     "x": 19,
+     "y": [
+      1080000,
+      2720000
+     ],
+     "text": "60%"
+    }
+   ]
+  }
+ ]
+}

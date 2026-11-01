@@ -21,6 +21,21 @@ def _ok(v):
     return isinstance(v, float) and v == v
 
 
+def _to_frac(v, ax):
+    """坐标值在轴上的位置（0–1），对数轴按对数算。"""
+    a, b = ax['from'], ax['to']
+    if ax.get('log'):
+        return (math.log10(max(v, 1e-300)) - math.log10(a)) / (math.log10(b) - math.log10(a))
+    return (v - a) / (b - a)
+
+
+def _from_frac(f, ax):
+    a, b = ax['from'], ax['to']
+    if ax.get('log'):
+        return 10 ** (math.log10(a) + f * (math.log10(b) - math.log10(a)))
+    return a + f * (b - a)
+
+
 class Figure:
     RES = 600   # 页面坐标单位为 1/600 英寸，与导出 dpi 无关
 
@@ -84,13 +99,41 @@ class Figure:
         obj = L.label(nm)
         return tuple(self.cm(obj.get_float(k)) for k in ('left', 'top', 'width', 'height'))
 
-    def segment(self, L, x1, y1, x2, y2, color=INK, width=0.75, dash=0, arrow=False):
+    def segment(self, L, x1, y1, x2, y2, color=INK, width=0.75, dash=0, arrow=False, head=(4, 6)):
+        """数据坐标的线段；arrow 为 True（终点带箭头）或 'both'（两端都带），head 为箭头的 (宽, 长)。"""
         nm = self.name('D')
         L.lt_exec(f'draw -n {nm} -l {{{x1}, {y1}, {x2}, {y2}}}; {nm}.color = color({color}); '
                   f'{nm}.lineWidth = {width}; {nm}.lineType = {dash + 1};')
         if arrow:
-            self.s.fmt(self.g.name, L.index(), {'Arrow': {'End': {'Style': 1, 'Width': 4, 'Length': 6}}}, obj=nm)
+            hd = {'Style': 1, 'Width': head[0], 'Length': head[1]}
+            tree = {'Arrow': {'End': hd, **({'Begin': hd} if arrow == 'both' else {})}}
+            self.s.fmt(self.g.name, L.index(), tree, obj=nm)
         return nm
+
+    def to_data(self, L, frame, x, y, xa, ya, brk=None):
+        """页面位置（cm）换成该图层的数据坐标（考虑对数轴和断轴）。"""
+        X0, X1, Y0, Y1 = self.ranges(L)
+        fx, fy = (x - frame[0]) / frame[2], 1 - (y - frame[1]) / frame[3]
+        lin = lambda f, a, b, log: 10 ** (math.log10(a) + f * (math.log10(b) - math.log10(a))) if log else a + f * (b - a)
+        if brk:
+            pos = brk.get('at', 0.5)
+            Y = Y0 + fy / pos * (brk['from'] - Y0) if fy <= pos else brk['to'] + (fy - pos) / (1 - pos) * (Y1 - brk['to'])
+        else:
+            Y = lin(fy, Y0, Y1, ya.get('log'))
+        return lin(fx, X0, X1, xa.get('log')), Y
+
+    def to_page(self, L, frame, x, y):
+        """数据坐标换成页面位置（cm），考虑对数轴。"""
+        X0, X1, Y0, Y1 = self.ranges(L)
+        fx = _to_frac(x, {'from': X0, 'to': X1, 'log': L.get_float('x.type') == 2})
+        fy = _to_frac(y, {'from': Y0, 'to': Y1, 'log': L.get_float('y.type') == 2})
+        return frame[0] + fx * frame[2], frame[1] + (1 - fy) * frame[3]
+
+    def polyline(self, L, frame, pts, xa, ya, brk=None, color=INK, width=0.4):
+        data = [self.to_data(L, frame, x, y, xa, ya, brk) for x, y in pts]
+        for (a, b), (c, d) in zip(data, data[1:]):
+            if (a, b) != (c, d):
+                self.segment(L, a, b, c, d, color, width)
 
     def new_layer(self, box, first=False):
         """图层按 box=(左, 上, 宽, 高) cm 放置，随即把缩放因子定为 1：否则之后设的字号、线宽会按图层大小缩放。"""
@@ -113,7 +156,14 @@ class Figure:
                 frame[1] = len(p['rows']) * d['row_height']        # 每行高度与参考图相同
             m = list(p.get('margin') or d['margin'])
             if p['type'] != 'heatmap' and not p.get('margin'):
-                m[0] += self.label_shift(p)
+                shift, factor = self.axis_room(p)
+                m[0] += shift
+                if p.get('y2'):
+                    shift2, factor2 = self.axis_room(p, 'y2')
+                    m[2] = max(m[2], d['margin'][0] + shift2)      # 右纵轴的刻度值和标题
+                    factor = factor or factor2
+                if factor:
+                    m[1] += 1.3 * st['font']['size'] * PT          # 框上方放 ×10ⁿ
             if p.get('caption'):
                 m[3] += st['caption']['height']
             cells.append({'frame': frame, 'margin': m, 'fixed': bool(p.get('frame'))})
@@ -143,39 +193,51 @@ class Figure:
         self.s.lt('doc -uw;')
         for IL in self.insets:
             IL.lt_exec('label -r legend;')      # 插图图层的自动图例会在刷新时重建，最后再删一次
-        for k, text in self.legends.items():
+        for host, text in self.legends.values():
             # 加辅助曲线（椭圆等）后 Origin 刷新时会往图例补条目，最后恢复
             self.s.set_str('__t$', text)
-            layers[k].lt_exec('legend.text$ = __t$;')
+            host.lt_exec('legend.text$ = __t$;')
         for script in spec.get('labtalk') or []:
             g.lt_exec(script)
         g.lt_exec('page -afu1;')
 
-    def label_shift(self, p):
-        """纵轴刻度值比参考图的“0.95”宽或窄时，左侧留白相应增减，页面左缘的空白保持不变。"""
-        _, ya = self.auto_axes(p, p['series'], p['table'], p['type'] == 'bar')
+    def axis_room(self, p, key='y'):
+        """纵轴刻度值比参考图的“0.95”宽或窄时，留白相应增减，页面边缘的空白保持不变。返回 (增减 cm, 数量级因子)。"""
+        if key == 'y':
+            _, ya = self.auto_axes(p, p['series'], p['table'], p['type'] == 'bar')
+        else:
+            _, ya = self.auto_axes({'x': p['x'], 'y': p['y2']}, p['y2']['series'], p['table'], False)
         if ya.get('log'):
-            return 0.0
+            return 0.0, None
         n = int((ya['to'] - ya['first']) / ya['step'] + 1e-9) + 1
-        em = lambda t: sum(0.25 if ch == '.' else 0.5 for ch in t)        # Times 数字约半个字宽
-        w = max(em(f'{ya["first"] + k * ya["step"]:.{ya["decimals"]}f}') for k in range(max(n, 1)))
-        return (w - em('0.95')) * self.st['font']['size'] * PT
+        k = 10 ** (ya.get('factor') or 0)
+        em = lambda t: sum(0.25 if ch == '.' else 0.5 for ch in t)        # 数字约半个字宽
+        w = max(em(f'{(ya["first"] + j * ya["step"]) / k:.{ya["decimals"]}f}') for j in range(max(n, 1)))
+        return (w - em('0.95')) * self.st['font']['size'] * PT, ya.get('factor')
 
     # ---------- 点线 / 散点 / 柱状 ----------
     def xy_panel(self, L, i, p, frame):
         st, op = self.st, self.op
         table, series = p['table'], p['series']
-        enc = p.get('encode') or {}
+        y2 = p.get('y2')
+        right = y2['series'] if y2 else []
+        if y2 and p['y'].get('break'):
+            raise ValueError(f'面板 {i}：y2（右纵轴）与断轴不能同时使用')
+        enc = {**(st.get('encode') or {}), **(p.get('encode') or {})}
         bar = p['type'] == 'bar'
         order = self.bar_order(p, series) if bar else list(range(len(series)))
         # 重叠柱：画在后面的（高的）组颜色浅，前面的深
         group_order = _unique(series[k].get('group') for k in order) if bar and p.get('mode') == 'overlap' else None
-        styles = style.encode(series, mode=enc.get('color', 'auto'), size=enc.get('size', st['line']['symbol']),
+        # 左右两轴一起分配样式，同名的柱和曲线同色
+        styles = style.encode(series + right, mode=enc.get('color', 'auto'), size=enc.get('size', st['line']['symbol']),
                               size_step=enc.get('size_step', st['line']['symbol_step']),
                               width=enc.get('width', st['line']['width']), families=enc.get('families'),
-                              group_order=enc.get('group_order', group_order))
+                              group_order=enc.get('group_order', group_order), palette=enc.get('palette'),
+                              shapes=enc.get('shapes'), dashes=enc.get('dashes'),
+                              pattern=enc.get('pattern', st['bar'].get('pattern')) if bar else None)
+        styles, styles2 = styles[:len(series)], styles[len(series):]
         wks = op.new_sheet('w', lname=f'panel {i + 1}')
-        cols = _unique([c for s in series for c in (s['x'], s['y'], s.get('yerr')) if c])
+        cols = _unique([c for s in series + right for c in (s['x'], s['y'], s.get('yerr')) if c])
         labels = p['x'].get('labels')
         for k, c in enumerate(cols):
             # 分类横轴写成文本列，Origin 按行号定位并拿它作刻度标签
@@ -184,35 +246,120 @@ class Figure:
         if bar:
             plots, errs = self.add_bars(L, i, p, wks, idx, series, order)
         else:
-            plots, errs = {}, {}
-            for k, s in enumerate(series):
-                scatter = p['type'] == 'scatter' or s.get('line') is False
-                kind = 's' if scatter else 'l' if styles[k]['shape'] == 'none' else 'y'
-                plots[k] = L.add_plot(wks, idx[s['y']], idx[s['x']], type=kind,
-                                      colyerr=idx[s['yerr']] if s.get('yerr') else -1)
-                if s.get('yerr'):
-                    errs[k] = L.plot_list()[plots[k].index() + 1]      # 误差棒是紧跟在曲线后的一条
+            plots, errs = self.add_lines(L, wks, idx, series, styles, p['type'] == 'scatter')
         for k, pl in plots.items():
             self.plot_style(L, pl, styles[k], bar, p['type'] == 'scatter' or series[k].get('line') is False)
         for k, e in errs.items():
             self.errbar(L, e, styles[k], bar)
         xa, ya = self.auto_axes(p, series, table, bar)
         self.axes(L, xa, ya, p)
+        self.grid(L, p)
         if bar:
             L.lt_exec('layer.x.ticks=0;')          # 刻度在簇中央，会压在柱子的分界线上
+        self.factor_label(L, ya, frame, 'left')
         number = {k: pl.index() + 1 for k, pl in plots.items()}     # 曲线在图层里的序号（\l(n) 用），误差棒也占序号
+        shapes = self.occupancy(p, series, styles, xa, bar)
         rep = {}
-        if (p.get('legend') or {}).get('show', True):
-            rep['legend'] = self.legend(L, i, p, series, styles, number, frame, xa, ya, bar)
-        else:
+        lg = p.get('legend') or {}
+        if y2:
+            R, plots2, ya2 = self.add_right(L, p, wks, idx, right, styles2, xa, frame)
+            to_left = lambda v: _from_frac(_to_frac(v, ya2), ya)          # 右轴数值换到左轴坐标，供图例避让
+            for sh in self.occupancy(p, right, styles2, xa, False):
+                shapes.append(('rect', sh[1], sh[2], to_left(sh[3]), to_left(sh[4])) if sh[0] == 'rect'
+                              else ('line', sh[1], [to_left(v) for v in sh[2]], sh[3]))
+            rep['y2'] = [ya2['from'], ya2['to']]
+        if not lg.get('show', True):
             L.lt_exec('label -r legend;')
+        elif y2 and lg.get('layout', 'split') == 'split':
+            # 左轴、右轴各一个单列图例，分放两侧的角上（文献 RCWA Fig.5 的做法）；第二个避开第一个
+            corners = ('top-left', 'top-right', 'bottom-left', 'bottom-right')
+            rep['legend'] = self.legend(L, i, p, series, number, frame, xa, ya, bar, shapes, fixed=True,
+                                        auto=corners, ncol=1)
+            l, t, w, h = rep['legend']['box_cm']
+            (x0, y0), (x1, y1) = self.to_data(L, frame, l, t + h, xa, ya), self.to_data(L, frame, l + w, t, xa, ya)
+            number2 = {k: pl.index() + 1 for k, pl in plots2.items()}
+            rep['legend2'] = self.legend(L, i, p, right, number2, frame, xa, ya, False, shapes + [('rect', x0, x1, y0, y1)],
+                                         fixed=True, host=R, auto=corners[1::-1] + corners[:1:-1], ncol=1)
+        else:
+            leg = list(series)
+            if y2:
+                number.update({len(series) + k: f'{R.index() + 1}.{pl.index() + 1}' for k, pl in plots2.items()})
+                leg += right
+                if not any(s.get('group') for s in leg):
+                    # 合成一个图例时按轴分行：行首为轴标题
+                    lt, rt = p['y'].get('title') or 'left', y2.get('title') or 'right'
+                    leg = [dict(s, group=lt) for s in series] + [dict(s, group=rt) for s in right]
+            rep['legend'] = self.legend(L, i, p, leg, number, frame, xa, ya, bar, shapes, fixed=bool(y2))
+        if y2 and y2.get('hint'):
+            self.y2_hint(L, p, right, ya, ya2)
         if p.get('inset'):
             rep['inset'] = self.inset(L, p, series, styles, frame, wks, idx)
         for mk in p.get('marks') or []:
             self.mark(L, mk, frame, i)
         x0, x1, y0, y1 = self.ranges(L)
-        rep.update({'x': [x0, x1], 'y': [y0, y1], 'styles': styles})
+        rep.update({'x': [x0, x1], 'y': [y0, y1], 'styles': styles + styles2})
         return rep
+
+    def add_lines(self, L, wks, idx, series, styles, scatter_panel):
+        plots, errs = {}, {}
+        for k, s in enumerate(series):
+            scatter = scatter_panel or s.get('line') is False
+            kind = 's' if scatter else 'l' if styles[k]['shape'] == 'none' else 'y'
+            plots[k] = L.add_plot(wks, idx[s['y']], idx[s['x']], type=kind,
+                                  colyerr=idx[s['yerr']] if s.get('yerr') else -1)
+            if s.get('yerr'):
+                errs[k] = L.plot_list()[plots[k].index() + 1]      # 误差棒是紧跟在曲线后的一条
+        return plots, errs
+
+    def add_right(self, L, p, wks, idx, right, styles2, xa, frame):
+        """右纵轴：与主图层同框、横轴联动的图层（Origin 的 Right-Y 图层），画 y2 的曲线。"""
+        y2 = p['y2']
+        self.g.lt_exec(f'page.active = {L.index() + 1};')
+        R = self.g.add_layer(2)
+        self.g.lt_exec('page -afu1;')
+        plots, errs = self.add_lines(R, wks, idx, right, styles2, y2['type'] == 'scatter')
+        for k, pl in plots.items():
+            self.plot_style(R, pl, styles2[k], False, y2['type'] == 'scatter' or right[k].get('line') is False)
+        for k, e in errs.items():
+            self.errbar(R, e, styles2[k], False)
+        _, ya2 = self.auto_axes({'x': p['x'], 'y': y2}, right, p['table'], False)
+        st, f = self.st, self.font
+        ax = st['axis']
+        tk = {'in': 1, 'out': 2, 'none': 0}[ax['ticks']]
+        R.lt_exec(f'layer.x.from={xa["from"]}; layer.x.to={xa["to"]}; layer.x.showAxes=0; layer.x.showLabels=0; '
+                  f'layer.x.ticks=0; layer.x2.ticks=0; layer.tickL={ax["tick_length"]}; layer.tickW={ax["tick_width"]}; '
+                  f'layer.y.from={ya2["from"]}; layer.y.to={ya2["to"]}; layer.y.inc={ya2["step"]}; '
+                  f'layer.y.firstTick={ya2["first"]}; layer.y.minorTicks={ax["minor"]}; layer.y.showAxes=2; '
+                  f'layer.y.showLabels=2; layer.y.ticks=0; layer.y2.ticks={tk}; layer.y2.label.font={f}; '
+                  f'layer.y2.label.pt={st["font"]["size"]}; layer.y2.label.numFormat=1; '
+                  f'layer.y2.label.decPlaces={ya2["decimals"]}; layer.y2.thickness={ax["thickness"]};')
+        if ya2.get('log'):
+            R.lt_exec(f'layer.y.type=2; layer.y.labelSubtype=2; layer.y.inc=1; layer.y.firstTick={ya2["from"]};')
+        if y2.get('title'):
+            self.s.set_str('__t$', self.rich(y2['title']))
+            R.lt_exec(f'label -yr "x"; yr.text$ = __t$; yr.font={f}; yr.fsize={st["font"]["title"]};')
+        R.lt_exec('label -r xb; label -r yl; label -r xt;')
+        self.factor_label(R, ya2, frame, 'right')
+        if (p.get('legend') or {}).get('layout', 'split') != 'split' or not (p.get('legend') or {}).get('show', True):
+            R.lt_exec('label -r legend;')
+            self.insets.append(R)       # 刷新时冒出来的自动图例最后一并删掉
+        return R, plots, ya2
+
+    def y2_hint(self, L, p, right, ya, ya2):
+        """虚线圈住右轴曲线的末端，再用箭头指向右纵轴（文献 RCWA Fig.5 的做法）。"""
+        X0, X1, Y0, Y1 = self.ranges(L)
+        ends = [pts[-1] for pts in (self.points(p['table'], s) for s in right) if pts]
+        if not ends:
+            return
+        to_left = lambda v: _from_frac(_to_frac(v, ya2), ya)
+        cx = max(x for x, _, _ in ends)
+        ys = [to_left(y) for _, y, _ in ends]
+        rx, ry = 0.035 * (X1 - X0), (max(ys) - min(ys)) / 2 + 0.06 * (Y1 - Y0)
+        cy = (max(ys) + min(ys)) / 2
+        color = self.st['mark'].get('hint_color', '#E02020')
+        self.mark(L, {'type': 'ellipse', 'center': [cx, cy], 'radius': [rx, ry], 'dash': 'dash', 'color': color,
+                      'width': 0.5}, None)
+        self.segment(L, cx + rx, cy, X1, cy - 0.12 * (Y1 - Y0), color, 0.5, arrow=True)
 
     def bar_order(self, p, series):
         """重叠柱（overlap）：同一 group 的柱并排成簇，各 group 之间重叠；先画均值大的 group（在后面）。"""
@@ -242,6 +389,7 @@ class Figure:
             cols = [[series[k]['x'], series[k]['y']] + ([series[k]['yerr']] if series[k].get('yerr') else []) for k in ks]
             xy = ','.join('(' + ','.join(str(idx[c] + 1) for c in cs) + ')' for cs in cols)
             self.s.lt(f'plotxy iy:={rng}!({xy}) plot:=203 ogl:=[{self.g.name}]{L.index() + 1}!;')
+            self.s.lt('doc -uw;')       # 等 Origin 把新画的柱建好，再取曲线对象
             pl = L.plot_list()
             plots.update({k: pl[base + j] for j, k in enumerate(ks)})
             errs.update({k: pl[base + len(ks) + j] for j, k in enumerate(k for k in ks if series[k].get('yerr'))})
@@ -255,20 +403,30 @@ class Figure:
         k, li = pl.index(), L.index()
         if bar:
             st = self.st['bar']
-            self.s.fmt(self.g.name, li, {'Pattern': {'Fill': {'FillColor': self.op.ocolor(sty['color'])},
-                                                     'Border': {'Color': self.op.ocolor(st['border']),
-                                                                'Width': st['border_width']}},
-                                         'Spacing': {'Gap': st['gap']}}, plot=k)
+            fill = {'FillColor': self.op.ocolor(sty['color'])}
+            if sty.get('pattern', 'none') != 'none':
+                # 花纹叠在填充色上，黑白打印也能分清（文献 RCWA Fig.3–6 的做法）
+                fill['Pattern'] = {'Style': style.PATTERNS[sty['pattern']], 'PatternColor': self.op.ocolor(st['border']),
+                                   'Width': st.get('pattern_width', 0.3)}
+            tree = {'Pattern': {'Fill': fill, 'Border': {'Color': self.op.ocolor(st['border']), 'Width': st['border_width']}},
+                    'Spacing': {'Gap': st['gap']}}
+            for _ in range(2):
+                self.s.fmt(self.g.name, li, tree, plot=k)
+                if 'Pattern/Fill/FillColor' in self.s.dump(self.g.name, li, plot=k):      # 失败时读回的是空树
+                    return
+                self.s.lt('doc -uw;')       # 偶尔刚画好的柱还没就绪，设置不生效：刷新后再设一次
+            self.warnings.append(f'柱 {k + 1} 的颜色没设上，请检查导出图；可重新 build')
             return
         pl.color = sty['color']
         cmds = [f'-k {style.SHAPES[sty["shape"]]}', f'-kf {style.INTERIORS[sty["interior"]]}', f'-z {sty["size"]}']
         if not scatter:
             cmds += [f'-d {style.DASHES[sty["dash"]]}', f'-wp {sty["width"]}']
         pl.set_cmd(*cmds)
-        tree = {'Line': {'LineSymbolOrder': 2}}          # 连线画在符号后面、不在符号处断开
-        if sty['interior'] != 'solid':
+        tree = {} if scatter else {'Line': {'LineSymbolOrder': 2}}      # 连线画在符号后面、不在符号处断开
+        if sty['interior'] != 'solid' and sty['shape'] != 'none':
             tree['Symbol'] = {'FillColor': -4}           # 无填充：空心、半填充的空白处透明
-        self.s.fmt(self.g.name, li, tree, plot=k)
+        if tree:
+            self.s.fmt(self.g.name, li, tree, plot=k)
 
     def errbar(self, L, e, sty, bar):
         """误差棒：点线图随曲线颜色和线宽，柱状图用柱的边框色。"""
@@ -291,9 +449,13 @@ class Figure:
         if bar and p.get('mode') == 'stacked':
             n = len(table[series[0]['y']])
             ys = [sum(table[s['y']][r] for s in series if _ok(table[s['y']][r])) for r in range(n)]
-        cat = 1 if p['x'].get('labels') else None      # 分类横轴每个类别一个刻度
-        xa = layout.x_axis(_unique(xs), p['x'].get('step') or cat)
-        ya = layout.y_axis(min(ys + ([0.0] if bar else [])), max(ys), p['y'].get('step'), baseline=0.0 if bar else None)
+        step = p['x'].get('step') or (1 if p['x'].get('labels') else None)      # 分类横轴每个类别一个刻度
+        if bar and not step:
+            ux = sorted(set(xs))
+            step = round(min((b - a for a, b in zip(ux, ux[1:])), default=0), 10) or None     # 每簇一个刻度
+        xa = layout.x_axis(_unique(xs), step)
+        ya = layout.y_axis(min(ys + ([0.0] if bar else [])), max(ys), p['y'].get('step'),
+                           target=self.st['axis'].get('y_ticks', 5), baseline=0.0 if bar else None)
         for a, d, vals in (('x', xa, xs), ('y', ya, ys)):
             if p[a].get('scale') == 'log':
                 # 对数轴：范围取整十倍，每十倍一个刻度，刻度值写成 10^n
@@ -314,16 +476,36 @@ class Figure:
                 d['fixed'] = True
             if user.get('step'):
                 d['step'] = user['step']
-            d['first'] = user.get('first', layout.first_tick(d['from'], d['step']))
+            d['first'] = user.get('first', self.aligned_first(xs, d) if a == 'x' else layout.first_tick(d['from'], d['step']))
             fine = [d['step']] + ([user['break']['step']] if (user.get('break') or {}).get('step') else [])
-            d['decimals'] = user.get('decimals', max(layout.decimals(v) for v in fine))
+            fac = user.get('factor', self.st['axis'].get('factor')) if a == 'y' else None
+            if fac == 'auto':
+                # 数值上万时刻度值除以 10ⁿ，只留一两位整数（如 32 ×10⁵）
+                big = max(abs(d['from']), abs(d['to']))
+                fac = math.floor(math.log10(big)) - 1 if big >= 1e4 else None
+            if fac:
+                d['factor'] = int(fac)
+                fine = [v / 10 ** fac for v in fine]
+            d['decimals'] = user.get('decimals', max(layout.decimals(round(v, 12)) for v in fine))
         brk = p['y'].get('break')
         if brk and 'at' not in brk:
-            # 断点位置默认让上下两段比例尺一致
             a, b = brk['from'] - ya['from'], ya['to'] - brk['to']
-            if a > 0 and b > 0:
-                brk['at'] = round(a / (a + b), 4)
+            if brk.get('step') and abs(brk['step'] - ya['step']) > 1e-12:
+                brk['at'] = 0.6         # 上下两段刻度间距不同（两种量级），按比例尺一致会把一段压没，下段（细节）多占一些
+            elif a > 0 and b > 0:
+                brk['at'] = round(min(max(a / (a + b), 0.25), 0.8), 4)      # 上下两段比例尺一致
         return xa, ya
+
+    @staticmethod
+    def aligned_first(xs, d):
+        """数据横坐标等距、且与刻度间距成整数倍时，刻度对齐到数据点（如 15, 45, 75…；180, 300, 420…）。"""
+        ux, step = sorted(set(xs)), d['step']
+        whole = lambda v: abs(v - round(v)) < 1e-6
+        if len(ux) > 1:
+            dx = min(b - a for a, b in zip(ux, ux[1:]))
+            if all(whole((u - ux[0]) / dx) for u in ux) and (whole(step / dx) or whole(dx / step)):
+                return round(ux[0] - math.floor((ux[0] - d['from']) / step + 1e-9) * step, 12)
+        return layout.first_tick(d['from'], step)
 
     def axes(self, L, xa, ya, p, size=None, ticks=None, title_size=None):
         st, f = self.st, self.font
@@ -358,14 +540,40 @@ class Figure:
                 L.lt_exec(f'label -r {obj};')
         L.lt_exec('label -r xt; label -r yr;')      # 模板里上、右轴的标题（框线显示后会冒出来）
 
+    def grid(self, L, p):
+        """主刻度网格线：预设 axis.grid（如 JSAC 风格的浅灰短虚线），面板里 x/y.grid 可开关或覆盖。柱状图默认不画竖线。"""
+        g = self.st['axis'].get('grid')
+        for a, node, sub in (('x', 'X', 'VerticalMajorGrids'), ('y', 'Y', 'HorizontalMajorGrids')):
+            on = p[a].get('grid', bool(g) and not (p['type'] == 'bar' and a == 'x'))
+            if not on:
+                continue
+            gs = {**(g or {}), **(on if isinstance(on, dict) else {})}
+            self.s.fmt(self.g.name, L.index(), {'Axes': {node: {'Grids': {sub: {
+                'Show': 1, 'Color': self.op.ocolor(gs.get('color', '#D0D3D4')),
+                'Style': style.DASHES[gs.get('style', 'short_dash')], 'Width': gs.get('width', 0.4)}}}}})
+
+    def factor_label(self, L, ya, frame, side):
+        """刻度值除以 10ⁿ 显示，框上方写 ×10ⁿ（JSAC 文献的做法）。"""
+        n = ya.get('factor')
+        if not n:
+            return
+        labels = 'LeftLabels' if side == 'left' else 'RightLabels'
+        self.s.fmt(self.g.name, L.index(), {'Axes': {'Y': {'Labels': {labels: {'DivideByFactor': f'1E{n}'}}}}})
+        nm = self.text(L, f'×10\\+({n})', self.st['font']['size'])
+        x = frame[0] if side == 'left' else frame[0] + frame[2]
+        self.at_page(L, [(nm, x, frame[1] - 0.04, 'lb' if side == 'left' else 'rb')])
+
     # ---------- 图例 ----------
-    def legend_text(self, p, series, number):
+    def legend_text(self, p, series, number, ncol=None):
         lg = p.get('legend') or {}
         if lg.get('text'):
             return lg['text']
         names = _unique(s.get('name') for s in series)
         groups = _unique(s.get('group') for s in series if s.get('group') is not None)
         cell = lambda k, label: f'\\l({number[k]}) {label}'.rstrip()
+        if len(groups) > 1 and len(names) > 1 and self.brace_layout(p):
+            # 一列，按 group 依次列出；组名由右侧的大括号标出（见 legend()）
+            return '\n'.join(cell(k, s.get('name')) for g in groups for k, s in enumerate(series) if s.get('group') == g)
         if len(groups) > 1 and len(names) > 1:
             # 矩阵式：每行一个 group（行首为组名），每列一个 name；transpose 时反过来。
             # 制表符分列，各列内容同宽时 Origin 自动对齐（表头行与色块列对不齐，所以不做表头式）
@@ -384,35 +592,66 @@ class Figure:
         entries = [cell(k, label(s)) for k, s in enumerate(series)]
         # 柱状图的色块和字一样高，多行时容易挤，放得下就排成一行（太宽时会缩小字号或报警告）
         default = len(entries) if len(entries) <= (6 if p['type'] == 'bar' else 3) else 2 if len(entries) == 4 else 3
-        ncol = lg.get('columns') or default
+        ncol = ncol or lg.get('columns') or self.st['legend'].get('columns') or default
         return '\n'.join('\t'.join(entries[r:r + ncol]) for r in range(0, len(entries), ncol))
 
-    def legend(self, L, i, p, series, styles, number, frame, xa, ya, bar):
+    def brace_layout(self, p):
+        return (p.get('legend') or {}).get('layout', self.st['legend'].get('layout', 'matrix')) == 'brace'
+
+    def legend(self, L, i, p, series, number, frame, xa, ya, bar, shapes, fixed=False, host=None, auto=None, ncol=None):
+        """host：图例对象所在的图层（右纵轴的图例放在右轴图层里），缺省为 L；位置一律按 L 的坐标计算。"""
         lgst = self.st['legend']
         lg = p.get('legend') or {}
-        L.lt_exec('legendupdate mode:=0;')
-        self.legends[L.index()] = self.rich(self.legend_text(p, series, number))
-        self.s.set_str('__t$', self.legends[L.index()])
-        L.lt_exec(f'legend.text$ = __t$; legend.font = {self.font}; legend.background = 0;')
+        host = host or L
+        li = host.index()
+        host.lt_exec('legendupdate mode:=0;')
+        self.legends[li] = (host, self.rich(self.legend_text(p, series, number, ncol)))
+        self.s.set_str('__t$', self.legends[li][1])
+        host.lt_exec(f'legend.text$ = __t$; legend.font = {self.font}; legend.background = 0;')
         tree = {'TabWidth': lgst['tab'], 'Symbol': {'LegendSymbolWidth': -lgst['symbol_width']}}
         if lgst.get('line_space') is not None:
             tree.update({'LineSpaceAuto': 0, 'LineSpace': lgst['line_space']})
-        self.s.fmt(self.g.name, L.index(), tree, obj='Legend')
+        frame_st = lg.get('frame', lgst.get('frame'))
+        if frame_st:
+            # 带边框、白底的图例（JSAC 风格），盖住背后的网格线
+            fs = frame_st if isinstance(frame_st, dict) else {}
+            host.lt_exec('legend.background = 1;')
+            tree['Background'] = {'Border': {'Color': self.op.ocolor(fs.get('color', '#231F20')), 'Width': fs.get('width', 0.4),
+                                             'Style': style.DASHES[fs.get('style', 'solid')]},
+                                  'Fill': {'Color': self.op.ocolor('#FFFFFF')}}
+        self.s.fmt(self.g.name, li, tree, obj='Legend')
         W, H = frame[2], frame[3]
         size = lg.get('size', lgst['size'])
         while True:
-            L.lt_exec(f'legend.fsize = {size};')
+            host.lt_exec(f'legend.fsize = {size};')
             self.s.lt('doc -uw;')
-            _, _, lw, lh = self.box(L, 'legend')
+            _, _, lw, lh = self.box(host, 'legend')
             if lw + 2 * lgst['side_gap'] <= W or size - 0.5 < lgst['min_size'] or 'size' in lg:
                 break
             size -= 0.5        # 太宽时逐步缩小字号，不低于 min_size
-        info = {'size_pt': size, 'width_cm': round(lw, 2), 'height_cm': round(lh, 2)}
-        if lw + 2 * lgst['side_gap'] > W:
-            self.warnings.append(f'面板 {i}：图例宽 {lw:.2f} cm，超出框宽 {W} cm；可减少每行条目（legend.columns）、'
+        groups = _unique(s.get('group') for s in series if s.get('group') is not None)
+        brace = self.brace_layout(p) and len(groups) > 1 and len(_unique(s.get('name') for s in series)) > 1
+        tw = lw
+        if brace:
+            bst = lgst.get('brace') or {}
+            row, pad = self.legend_rows(L, li, lh, len(series))
+            labels = [self.text(L, g, bst.get('size', size + 1)) for g in groups]
+            self.s.lt('doc -uw;')
+            wl = max(self.box(L, nm)[2] for nm in labels)
+            bw, gap = bst.get('width', 0.1), bst.get('gap', 0.06)
+            tw = lw + 2 * gap + bw + wl          # 图例框 + 大括号 + 组名
+            parts, k = [(0.0, 0.0, lw, lh)], 0
+            for g, nm in zip(groups, labels):
+                # 大括号是一条窄带，组名只占组中间的一行高
+                n = sum(1 for s in series if s.get('group') == g)
+                _, _, wg, hg = self.box(L, nm)
+                parts += [(lw + gap, pad + k * row, bw, n * row), (lw + 2 * gap + bw, pad + (k + n / 2) * row - hg / 2, wg, hg)]
+                k += n
+        info = {'size_pt': size, 'width_cm': round(tw, 2), 'height_cm': round(lh, 2)}
+        if tw + 2 * lgst['side_gap'] > W:
+            self.warnings.append(f'面板 {i}：图例宽 {tw:.2f} cm，超出框宽 {W} cm；可减少每行条目（legend.columns）、'
                                  '缩短名称或加宽面板')
         brk = p['y'].get('break')
-        shapes = self.occupancy(p, series, styles, xa, bar)
         yr, xr, step = (ya['from'], ya['to']), (xa['from'], xa['to']), ya['step']
         if brk:
             shapes = [self.frac_shape(sh, ya, brk) for sh in shapes]    # 断轴时按框内高度比例算，不改纵轴
@@ -421,21 +660,50 @@ class Figure:
             shapes = [self.log_shape(sh, xa.get('log'), ya.get('log')) for sh in shapes]
             lg10 = lambda r, on: tuple(math.log10(v) for v in r) if on else r
             yr, xr, step = lg10(yr, ya.get('log')), lg10(xr, xa.get('log')), None
-        placed = layout.place_legend((W, H), xr, yr, shapes, (lw, lh), pos=lg.get('pos', 'auto'),
+        placed = layout.place_legend((W, H), xr, yr, shapes, (tw, lh), pos=lg.get('pos', 'auto'),
+                                     parts=parts if brace else None,
                                      margin=lgst['margin'], side_gap=lgst['side_gap'], clear=lgst['clear'], step=step,
-                                     fixed=bool(ya.get('fixed') or brk), floor=0.0 if bar else None)
+                                     fixed=bool(ya.get('fixed') or brk or fixed), floor=0.0 if bar else None,
+                                     auto=auto or lgst.get('auto', ('bottom', 'top')))
         if placed['extended']:
             y0, y1 = placed['y']
             L.lt_exec(f'layer.y.from={y0}; layer.y.to={y1}; layer.y.firstTick={layout.first_tick(y0, ya["step"])};')
-        cx, cy = layout.legend_center((W, H), placed['y'], placed, (lw, lh), lgst['margin'])
+        cx, cy = layout.legend_center((W, H), placed['y'], placed, (tw, lh), lgst['margin'])
         cx, cy = cx + lg.get('dx', 0), cy + lg.get('dy', 0)
-        obj = L.label('legend')
-        obj.set_int('left', self.dots(frame[0] + cx - lw / 2))
-        obj.set_int('top', self.dots(frame[1] + H - cy - lh / 2))
+        left, top = frame[0] + cx - tw / 2, frame[1] + H - cy - lh / 2
+        obj = host.label('legend')
+        obj.set_int('left', self.dots(left))
+        obj.set_int('top', self.dots(top))
+        if brace:
+            # 每组的行右侧画大括号，括号尖端右边写组名
+            k, xb = 0, left + lw + gap
+            color, width = bst.get('color', INK), bst.get('line_width', 0.4)
+            items = []
+            for g, nm in zip(groups, labels):
+                n = sum(1 for s in series if s.get('group') == g)
+                y0c, y1c = top + pad + k * row + 0.12 * row, top + pad + (k + n) * row - 0.12 * row
+                self.polyline(L, frame, layout.brace_points(xb, y0c, y1c, bw), xa, ya, brk, color, width)
+                items.append((nm, xb + bw + gap, (y0c + y1c) / 2, 'lc'))
+                k += n
+            self.at_page(L, items)
         if placed['overlap']:
             self.warnings.append(f'面板 {i}：图例与数据重叠（{placed["pos"]}），可设 legend.pos / dx / dy，或放宽坐标范围')
         info.update({k: placed[k] for k in ('pos', 'offset', 'extended', 'overlap')})
+        info['box_cm'] = [round(v, 3) for v in (left, top, tw, lh)]
         return info
+
+    def legend_rows(self, L, li, lh, n):
+        """图例每行的高度和上下内边距：去掉最后一行再量一次高度。"""
+        text = self.legends[li][1]
+        self.s.set_str('__t$', text.rsplit('\n', 1)[0])
+        L.lt_exec('legend.text$ = __t$;')
+        self.s.lt('doc -uw;')
+        lh2 = self.box(L, 'legend')[3]
+        self.s.set_str('__t$', text)
+        L.lt_exec('legend.text$ = __t$;')
+        self.s.lt('doc -uw;')
+        row = lh - lh2
+        return row, (lh - n * row) / 2
 
     def occupancy(self, p, series, styles, xa, bar):
         """数据在图里占的位置：折线（点上带符号半径，cm）或柱（每根柱的矩形）。"""
@@ -551,13 +819,22 @@ class Figure:
             X0, X1, _, _ = self.ranges(L)
             per_cm = (X1 - X0) / frame[2]
             cap = mk.get('cap', 0.08) * per_cm
-            self.segment(L, x, y1, x, y2, color, width)
-            for y in (y1, y2):
-                self.segment(L, x - cap, y, x + cap, y, color, width)
+            if mk.get('style') == 'arrow':
+                # 双向箭头（JSAC 文献标提升百分比的写法），文字默认横排
+                self.segment(L, x, y1, x, y2, color, width, arrow='both', head=(2.5, 4))
+            else:
+                self.segment(L, x, y1, x, y2, color, width)
+                for y in (y1, y2):
+                    self.segment(L, x - cap, y, x + cap, y, color, width)
             if mk.get('text'):
                 side = 1 if mk.get('side', 'right') == 'right' else -1
-                nm = self.text(L, mk['text'], mk.get('size', st['size']), color, rotate=90)
-                self.at_data(L, nm, x + side * mk.get('dx', 0.16) * per_cm, (y1 + y2) / 2)
+                rot = mk.get('rotate', 0 if mk.get('style') == 'arrow' else 90)
+                nm = self.text(L, mk['text'], mk.get('size', st['size']), color, rotate=rot)
+                if rot == 0:
+                    px, py = self.to_page(L, frame, x, (y1 + y2) / 2)
+                    self.at_page(L, [(nm, px + side * mk.get('dx', 0.06), py, 'lc' if side > 0 else 'rc')])
+                else:
+                    self.at_data(L, nm, x + side * mk.get('dx', 0.16) * per_cm, (y1 + y2) / 2)
                 self.inside(L, nm, frame, i, mk['text'])
         elif kind == 'text':
             nm = self.text(L, mk['text'], mk.get('size', st['size']), color, mk.get('rotate', 0))
@@ -571,21 +848,12 @@ class Figure:
             for (p, q), (r, s) in zip(corners, corners[1:]):
                 self.segment(L, p, q, r, s, color, width, dash)
         elif kind == 'ellipse':
-            # 画成一条数据曲线（坐标单位），图例是自定义文字，不会把它列进去
+            # 用短线段拼成（虚线时隔一段画一段）：不是数据曲线，不会混进图例、也不影响坐标范围
             (cx, cy), (rx, ry) = mk['center'], mk['radius']
-            t = [2 * math.pi * k / 96 for k in range(97)]
-            wk = self.op.new_sheet('w', lname='marks')
-            wk.from_list(0, [cx + rx * math.cos(a) for a in t])
-            wk.from_list(1, [cy + ry * math.sin(a) for a in t])
-            x0, x1, y0, y1 = self.ranges(L)
-            pl = L.add_plot(wk, 1, 0, type='l')
-            pl.color = color
-            pl.set_cmd(f'-d {dash}', f'-wp {width}')
-            L.lt_exec(f'layer.x.from={x0}; layer.x.to={x1}; layer.y.from={y0}; layer.y.to={y1};')
-            if L.index() in self.legends:
-                # 加曲线时 Origin 会往图例里自动补一条，恢复原文字
-                self.s.set_str('__t$', self.legends[L.index()])
-                L.lt_exec('legend.text$ = __t$;')
+            pts = [(cx + rx * math.cos(2 * math.pi * k / 72), cy + ry * math.sin(2 * math.pi * k / 72)) for k in range(73)]
+            for k, ((a, b), (c, d)) in enumerate(zip(pts, pts[1:])):
+                if dash == 0 or k % 2 == 0:
+                    self.segment(L, a, b, c, d, color, width)
         else:
             raise ValueError(f'marks 的 type 不认识：{kind!r}（可用 bracket / text / line / arrow / ellipse / rect）')
 

@@ -153,3 +153,50 @@ def test_heatmap_cell_ink_only_darkens_pale_cells():
     assert heatmap.cell_ink(ramp, 0.0) != '#FFFFFF'
     assert heatmap.cell_ink(ramp, 0.5) == '#FFFFFF'
     assert heatmap.cell_ink(ramp, 1.0) == '#FFFFFF'
+
+
+# ---------- 学自文献的 JSAC 风格 ----------
+
+def test_categorical_palette_with_groups_like_jsac():
+    """颜色跟方法走（分类配色），组之间只改填充、大小和线型（Hybrid relay Fig.8）。"""
+    st = style.encode(series(['QTx', 'QRx'], ['CO-QBN', 'PTR']), mode='categorical', palette='jsac',
+                      shapes=['up', 'down'], dashes=['short_dash', 'solid'], size=2.5, size_step=1.5)
+    cats = style.palettes()['categorical']['jsac']
+    assert [s['color'] for s in st] == [cats[0], cats[1], cats[0], cats[1]]
+    assert [s['shape'] for s in st] == ['up', 'down', 'up', 'down']
+    assert [(s['interior'], s['dash'], s['size']) for s in st[::2]] == [('solid', 'short_dash', 2.5), ('open', 'solid', 4.0)]
+    with pytest.raises(ValueError):
+        style.encode(series(['A'], [1]), palette='nope')
+
+
+def test_legend_corner_and_parts():
+    frame, xr, yr = (5.0, 4.0), (0, 10), (0, 10)
+    placed = layout.place_legend(frame, xr, yr, [], (1.5, 1.0), pos='top-left', side_gap=0.1)
+    assert placed['pos'] == 'top-left' and placed['offset'] == pytest.approx(-(5.0 - 1.5) / 2 + 0.1)
+    # 一条线从整体矩形的右下角穿过，但避开了实际占用的两块（图例框 + 组名）
+    line = ('line', [3.2, 3.3], [6.2, 6.2], 0.03)
+    whole = layout.place_legend(frame, xr, yr, [line], (2.0, 1.6), pos='top-left', fixed=True, side_gap=0.1)
+    parts = layout.place_legend(frame, xr, yr, [line], (2.0, 1.6), pos='top-left', fixed=True, side_gap=0.1,
+                                parts=[(0, 0, 1.0, 1.6), (1.1, 0.2, 0.9, 0.3)])
+    assert whole['overlap'] and not parts['overlap']
+
+
+def test_brace_points_shape():
+    pts = layout.brace_points(1.0, 0.0, 1.0, 0.1)
+    assert pts[0] == pytest.approx((1.0, 0.0)) and pts[-1] == pytest.approx((1.0, 1.0))
+    tip = max(pts, key=lambda p: p[0])
+    assert tip[0] == pytest.approx(1.1) and tip[1] == pytest.approx(0.5)
+
+
+def test_preset_extends_and_y2(tmp_path):
+    jsac = spec.load_preset('jsac', tmp_path)
+    assert jsac['font']['face'] == 'Arial' and jsac['heatmap']['palette'] == 'olive'      # 其余沿用 paper
+    (tmp_path / 'd.csv').write_text('x,A|g1,B|g1,ku\n1,1,2,0.5\n2,2,3,0.6\n', encoding='utf-8')
+    (tmp_path / 's.json').write_text(json.dumps({'preset': 'jsac', 'panels': [{
+        'type': 'bar', 'data': 'd.csv',
+        'matrix': {'names': ['A', 'B'], 'groups': ['g1'], 'col': '{name}|{group}', 'label': {'g1': 'η = 1'},
+                   'style': {'B': {'pattern': 'cross'}}},
+        'y2': {'series': [{'y': 'ku', 'name': 'A'}]}}]}), encoding='utf-8')
+    p = spec.load(tmp_path / 's.json')['panels'][0]
+    assert p['series'][0]['group'] == 'η = 1' and p['series'][1]['pattern'] == 'cross'
+    assert p['y2']['type'] == 'line' and p['y2']['series'][0]['x'] == 'x'

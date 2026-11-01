@@ -15,12 +15,14 @@ INTERIORS = {'solid': 0, 'open': 1, 'dot': 2, 'hollow': 3, 'plus': 4, 'cross': 5
              'half_up': 8, 'half_right': 9, 'half_down': 10, 'half_left': 11}
 DASHES = {'solid': 0, 'dash': 1, 'dot': 2, 'dash_dot': 3, 'dash_dot_dot': 4,
           'short_dash': 5, 'short_dot': 6, 'short_dash_dot': 7}
+# 柱的花纹（格式树 Pattern/Fill/Pattern/Style；Origin 每种花纹有密、中、疏三档，这里取中档，diag_dense 为密档）
+PATTERNS = {'none': 0, 'diag_dense': 1, 'diag': 2, 'back': 5, 'cross': 8, 'horizontal': 11, 'vertical': 14}
 
 SHAPE_ORDER = ['diamond', 'up', 'circle', 'square', 'down', 'hexagon', 'pentagon', 'star']
 DASH_ORDER = ['solid', 'short_dash', 'short_dash_dot', 'short_dot', 'dash', 'dash_dot', 'dot', 'dash_dot_dot']
 # 首尾固定为实心、空心，中间的组依次用这些
 MIDDLE_INTERIORS = ['half_up', 'half_down', 'half_left', 'half_right', 'dot']
-STYLE_KEYS = ('color', 'shape', 'interior', 'size', 'dash', 'width')
+STYLE_KEYS = ('color', 'shape', 'interior', 'size', 'dash', 'width', 'pattern')
 
 _PALETTES = None
 
@@ -72,6 +74,16 @@ def family(name: str) -> list:
     return fams[name]
 
 
+def categorical(palette) -> list:
+    """一组互相区分的颜色：palettes.json 里 categorical 的名字，或颜色列表。"""
+    if isinstance(palette, str):
+        cats = palettes().get('categorical', {})
+        if palette not in cats:
+            raise ValueError(f'没有分类配色 {palette!r}，可用：{", ".join(cats)}')
+        return cats[palette]
+    return list(palette)
+
+
 def heatmap_colors(palette, n: int) -> list:
     """热图色阶：palette 为 palettes.json 里的名字或颜色列表（由浅到深）。"""
     if isinstance(palette, str):
@@ -99,12 +111,16 @@ def _unique(values) -> list:
 
 
 def encode(series: list, mode: str = 'auto', size: float = 3.0, size_step: float = 1.0, width: float = 0.37,
-           families: list = None, group_order: list = None) -> list:
+           families: list = None, group_order: list = None, palette=None, shapes: list = None,
+           dashes: list = None, pattern: str = None) -> list:
     """series 为 [{'name':..., 'group':..., 可选覆盖项}]，返回每条的样式字典。
 
     mode：family（默认，有多个 group 时）/ group / categorical（只有 name 时）。
     families：按顺序使用的色系名，缺省用 palettes.json 的 order。
     group_order：group 的递进顺序（由浅到深），缺省按出现顺序。
+    palette：categorical 模式改用一组分类颜色（palettes.json 的 categorical，或颜色列表），每个 name 一色；
+             有多个 group 时，group 只改填充、大小和线型（JSAC 文献的做法）。
+    shapes、dashes：形状、线型的使用顺序（覆盖默认）。pattern：柱的花纹。
     """
     names = _unique(s.get('name') for s in series)
     groups = _unique(s.get('group') for s in series if s.get('group') is not None)
@@ -116,6 +132,8 @@ def encode(series: list, mode: str = 'auto', size: float = 3.0, size_step: float
     if mode not in ('family', 'group', 'categorical'):
         raise ValueError(f'encode.color 只能是 family / group / categorical，收到 {mode!r}')
     order = families or palettes()['order']['group' if mode == 'group' else 'family']
+    cats = categorical(palette) if palette else None
+    shape_order, dash_order = shapes or SHAPE_ORDER, dashes or DASH_ORDER
     fills, ng = interiors(len(groups)), max(len(groups), 1)
     out = []
     for s in series:
@@ -125,14 +143,16 @@ def encode(series: list, mode: str = 'auto', size: float = 3.0, size_step: float
             color = list(reversed(shades(family(order[gi % len(order)]), len(names))))[ni]
         elif mode == 'family' and (multi or len(names) == 1):
             color = shades(family(order[ni % len(order)]), ng)[gi]
+        elif cats:
+            color = cats[ni % len(cats)]
         else:
             fam = family(order[ni % len(order)])
             color = fam[max(len(fam) - 2, 0)]
-        style = {'color': color, 'shape': SHAPE_ORDER[ni % len(SHAPE_ORDER)],
+        style = {'color': color, 'shape': shape_order[ni % len(shape_order)],
                  'interior': fills[gi] if multi else 'solid',
                  'size': size + size_step * (gi if multi else 1),
-                 'dash': DASH_ORDER[gi % len(DASH_ORDER)] if multi else 'solid',
-                 'width': width}
+                 'dash': dash_order[gi % len(dash_order)] if multi else 'solid',
+                 'width': width, 'pattern': pattern or 'none'}
         style.update({k: s[k] for k in STYLE_KEYS if s.get(k) is not None})
         check(style)
         out.append(style)
@@ -140,7 +160,7 @@ def encode(series: list, mode: str = 'auto', size: float = 3.0, size_step: float
 
 
 def check(style: dict):
-    for key, table in (('shape', SHAPES), ('interior', INTERIORS), ('dash', DASHES)):
+    for key, table in (('shape', SHAPES), ('interior', INTERIORS), ('dash', DASHES), ('pattern', PATTERNS)):
         if style[key] not in table:
             raise ValueError(f'{key} 不认识 {style[key]!r}，可用：{", ".join(table)}')
     hex2rgb(style['color'])

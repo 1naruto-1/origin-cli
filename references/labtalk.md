@@ -95,7 +95,11 @@ s.dump(graph, layer, plot=k)   # {'Symbol/Size': '3', 'Line/Width': '0.37', ...}
 | `Spacing/Gap` | 柱间距 |
 | `ErrorBar2D/CapWidth` | 误差棒端帽宽度 |
 | `Stack/Offset` | 堆叠，写在图层上，值为 1 |
-| `Arrow/End/Style`、`Width`、`Length` | 箭头，写在线对象上 |
+| `Arrow/End/Style`、`Width`、`Length` | 箭头，写在线对象上；`Arrow/Begin/...` 为起点箭头（双向箭头两个都设） |
+| `Axes/X/Grids/VerticalMajorGrids/Show`、`Color`、`Style`、`Width` | 竖向主网格线（图层上）；横向为 `Axes/Y/Grids/HorizontalMajorGrids/...`。`Style` 的编号与 `set -d` 相同（5 为 short dash） |
+| `Axes/Y/Labels/LeftLabels/DivideByFactor` | 刻度值除以的因子，字符串，如 `"1E5"`；右轴为 `RightLabels` |
+| `Background/Border/Color`、`Width`、`Style` | 图例（或文字对象）的边框，配合 `legend.background = 1`；`Background/Fill/Color` 为底色 |
+| `Pattern/Fill/Pattern/Style`、`PatternColor`、`Width` | 柱的花纹，见第 5 节 |
 
 格式树里的颜色是 `0x01BBGGRR` 形式的整数，用 `op.ocolor('#RRGGBB')` 生成。
 
@@ -120,6 +124,14 @@ layer.unit=3; layer.left=..; layer.top=..; layer.width=..; layer.height=..;
 **新增图层**：用 `g.add_layer(0)`。图层上的属性在该图层的 `lt_exec` 里设置。
 
 **切换活动图层**：用 `page.active = n;`。写成 `layer2.x.from` 的语法在这里取不到值（返回 `--`）。`lt --layer n` 就是靠 `page.active` 实现的。
+
+**右纵轴图层**：
+1. 先 `page.active = n;` 激活主图层；
+2. `g.add_layer(2)`（即 `layadd type:=righty`），新图层与主图层同框、横轴联动，`layer.unit` 为 7（相对主图层的百分比，0–100）；
+3. 随即 `page -afu1;`；
+4. 设置 `layer.x.showAxes=0; layer.x.showLabels=0;` 隐藏横轴，`layer.y.showAxes=2; layer.y.showLabels=2; layer.y.ticks=0; layer.y2.ticks=...` 只显示右侧的纵轴，刻度值格式用 `layer.y2.label.*`，标题用 `label -yr`。
+
+图例里可以用 `\l(2.1)` 引用第 2 个图层的第 1 条曲线，所以一个图例能同时列出左右两轴的曲线。
 
 ## 4. 曲线样式
 
@@ -162,6 +174,10 @@ plotxy iy:=[Book]Sheet!((1,2,3),(1,4,5),(1,6,7)) plot:=203 ogl:=[Graph]1!;
 这样画出来，同簇的柱自动成组并排；误差棒排在这一组之后，各自跟着自己的柱。图层里的顺序是：这一簇的所有柱，然后是它们的误差棒。
 
 **堆叠**：在图层上应用格式树 `{'Stack': {'Offset': 1}}`。
+
+**花纹**：`Pattern/Fill/Pattern/Style` 的编号每三档一种（密、中、疏）：1–3 斜线 `/`，4–6 反斜线 `\`，7–9 斜网格，10–12 横线，13–15 竖线；0 为无。`PatternColor` 为花纹颜色，`FillColor` 仍是底色。
+
+**偶发的设置不生效**：plotxy 刚画完时，偶尔取到的柱对象读回的格式树是空的，设置颜色也没有效果（导出图是 Origin 默认的浅色柱、彩色边框）。plotxy 之后先 `doc -uw;` 再取曲线对象，设置后读回 `Pattern/Fill/FillColor` 确认，不在就刷新后再设一次。
 
 **分类横轴**：X 列写成文本列即可。Origin 按行号 1..n 定位，并用这列文字作刻度标签（`layer.x.label.type = 2`）。此后再设置 `numFormat` 也不会把标签改回数字。
 
@@ -304,7 +320,9 @@ draw -n D1 -l {x1, y1, x2, y2}; D1.color=color(#000000); D1.lineWidth=0.75; D1.l
 
 **箭头**：在线段对象上应用格式树 `{'Arrow': {'End': {'Style': 1, 'Width': 4, 'Length': 6}}}`。
 
-**椭圆**：画成一条参数方程曲线（数据曲线），可以设置虚线。代价是图例会自动多出一条，要按第 8 节的办法恢复图例文字。
+**椭圆**：用 72 段短线段拼成，虚线时隔一段画一段。以前画成数据曲线，Origin 会在导出时往图例里补一条（存进 .opju 的文字是对的，导出的 PNG 却多了一行），所以改成线段。
+
+**大括号**：同样用线段拼成（`layout.brace_points` 算出折线点），坐标由页面位置换算到数据坐标（`Figure.to_data`，考虑对数轴和断轴）。
 
 ## 11. 导出
 

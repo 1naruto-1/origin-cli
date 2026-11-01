@@ -1,0 +1,11 @@
+{
+  "output": "out/bar_break_twoscale",
+  "preset": "jsac",
+  "panels": [
+    {"type": "bar", "data": "data.csv",
+     "x": {"col": "requests", "title": "Number of QKPC requests"},
+     "y": {"title": "Running time (s)", "range": [0, 1000], "step": 0.1, "grid": false, "factor": null,
+           "break": {"from": 0.85, "to": 100, "step": 150}},
+     "encode": {"palette": "jlt"}}
+  ]
+}

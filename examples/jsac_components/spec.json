@@ -1,0 +1,34 @@
+{
+ "output": "out/jsac_components",
+ "preset": "jsac",
+ "panels": [
+  {
+   "type": "line",
+   "caption": "(a)",
+   "data": "data.csv",
+   "x": {
+    "col": "requests",
+    "title": "Number of QKD chain requests",
+    "step": 30
+   },
+   "y": {
+    "title": "Deployment cost (units)"
+   },
+   "matrix": {
+    "names": [
+     "QTx",
+     "QRx",
+     "LKM",
+     "SI",
+     "MUX",
+     "Link"
+    ],
+    "groups": [
+     "SC CO-QBN",
+     "SC PTR"
+    ],
+    "col": "{name}|{group}"
+   }
+  }
+ ]
+}

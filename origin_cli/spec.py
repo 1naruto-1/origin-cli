@@ -23,7 +23,17 @@ def load_preset(name: str, base: Path) -> dict:
         path = (base / path) if name.endswith('.json') else path
     if not path.exists():
         raise ValueError(f'找不到预设 {name}（presets/ 下有：{", ".join(p.stem for p in (SKILL_DIR / "presets").glob("*.json"))}）')
-    return json.loads(path.read_text(encoding='utf-8'))
+    preset = json.loads(path.read_text(encoding='utf-8'))
+    if preset.get('extends'):
+        # 只写与底稿不同的项，例如 jsac.json 以 paper.json 为底
+        preset = merge(load_preset(preset['extends'], path.parent), {k: v for k, v in preset.items() if k != 'extends'})
+    return preset
+
+
+def strip_ext(path) -> str:
+    """去掉图片/工程扩展名；fig_eta0.6 这类带小数点的名字保持原样。"""
+    path = Path(path)
+    return str(path.with_suffix('') if path.suffix.lower().lstrip('.') in FORMATS + ('opju',) else path)
 
 
 def _num(v):
@@ -57,12 +67,15 @@ def load_table(data, base: Path) -> dict:
 
 def _expand(m):
     """name × group 的简写：{"names": [...], "groups": [...], "col": "{name}_{group}", "label": "η = {group}"}
-    展开成 series（先按 group、再按 name）。"""
+    展开成 series（先按 group、再按 name）。label 也可以是 {group: 显示文字}；
+    style 为按 name 的单条覆盖，如 {"ILP": {"line": false}, "RANDOM": {"shape": "none"}}。"""
     if not m:
         return None
     col, label, err = m.get('col', '{name}_{group}'), m.get('label', '{group}'), m.get('yerr')
-    return [{'y': col.format(name=n, group=g), 'name': n, 'group': label.format(name=n, group=g),
-             **({'yerr': err.format(name=n, group=g)} if err else {})}
+    show = (lambda n, g: label.get(str(g), str(g))) if isinstance(label, dict) else (lambda n, g: label.format(name=n, group=g))
+    over = m.get('style') or {}
+    return [{'y': col.format(name=n, group=g), 'name': n, 'group': show(n, g),
+             **({'yerr': err.format(name=n, group=g)} if err else {}), **over.get(n, {})}
             for g in m['groups'] for n in m['names']]
 
 
@@ -78,19 +91,33 @@ def _xy_panel(p: dict, i: int, base: Path, shared):
         p['x']['labels'] = [str(v) for v in table[xcol]]
         table[xcol] = [float(k + 1) for k in range(len(table[xcol]))]
     series = p.get('series') or _expand(p.get('matrix')) or [{'y': c} for c in names if c != xcol]
-    out = []
+    p['series'], p['table'] = _series(series, table, xcol, f'面板 {i}'), table
+    p['y'] = dict(p.get('y') or {})
+    if p.get('y2'):
+        # 右纵轴：自己的 series / matrix，画成点线或散点，与左轴共用横轴
+        y2 = p['y2'] = dict(p['y2'])
+        y2.setdefault('type', 'line')
+        if y2['type'] not in ('line', 'scatter'):
+            raise ValueError(f'面板 {i}：y2.type 只能是 line / scatter')
+        raw = y2.get('series') or _expand(y2.get('matrix'))
+        if not raw:
+            raise ValueError(f'面板 {i}：y2 需要 series 或 matrix')
+        y2['series'] = _series(raw, table, xcol, f'面板 {i} 的 y2')
+
+
+def _series(series, table, xcol, where):
+    names, out = list(table), []
     for k, s in enumerate(series):
         s = dict(s) if isinstance(s, dict) else {'y': s}
         s.setdefault('x', xcol)
         for key in ('y', 'x', 'yerr'):
             if (key == 'y' or s.get(key) is not None) and s.get(key) not in table:
-                raise ValueError(f'面板 {i} 第 {k + 1} 条曲线：{key} 列 {s.get(key)!r} 不在数据里（有：{", ".join(names)}）')
+                raise ValueError(f'{where} 第 {k + 1} 条曲线：{key} 列 {s.get(key)!r} 不在数据里（有：{", ".join(names)}）')
             if s.get(key) is not None and len(table[s[key]]) != len(table[s['y']]):
-                raise ValueError(f'面板 {i}：列 {s[key]!r} 与 {s["y"]!r} 长度不同')
+                raise ValueError(f'{where}：列 {s[key]!r} 与 {s["y"]!r} 长度不同')
         s.setdefault('name', s['y'])
         out.append(s)
-    p['series'], p['table'] = out, table
-    p['y'] = dict(p.get('y') or {})
+    return out
 
 
 def _heatmap_panel(p: dict, i: int, base: Path, shared):
@@ -117,10 +144,7 @@ def load(path) -> dict:
     base = path.parent
     spec['style'] = merge(load_preset(spec.get('preset', 'paper'), base), spec.get('style'))
     out = Path(spec.get('output') or path.with_suffix('').name)
-    out = out if out.is_absolute() else base / out
-    if out.suffix.lower().lstrip('.') in FORMATS + ('opju',):
-        out = out.with_suffix('')       # 只去掉图片/工程扩展名，fig_eta0.6 这类名字保持原样
-    spec['output'] = str(out)
+    spec['output'] = strip_ext(out if out.is_absolute() else base / out)
     spec['formats'] = [f.lower().lstrip('.') for f in spec.get('formats') or ['png']]
     for f in spec['formats']:
         if f not in FORMATS:

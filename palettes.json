@@ -1,5 +1,5 @@
 {
-  "_note": "颜色均由浅到深。heatmap、families 中 blue/red/brown/teal/navy/warm 取自参考图（热力图/1–3、折线图/1–2）的像素；purple/gray 为补充色系",
+  "_note": "颜色均由浅到深。heatmap、families 中 blue/red/brown/teal/navy/warm 取自参考图（热力图/1–3、折线图/1–2）的像素；purple/gray 为补充色系。categorical 为一组互相区分的颜色，取自文献的矢量图：jsac = Cao 等 JSAC 2021（Hybrid relay）Fig.6–10，jlt = Cao 等 JLT 2018（Time-scheduled QKD）Fig.10–19，access = Yu 等 IEEE Access 2021（RCWA）Fig.3–6",
   "heatmap": {
     "olive": ["#EFEB95", "#6E500D"],
     "green": ["#CBEF95", "#006100"],
@@ -18,5 +18,10 @@
   "order": {
     "family": ["blue", "red", "brown", "teal", "navy", "warm", "purple", "gray"],
     "group": ["teal", "navy", "warm", "blue", "red", "brown", "purple", "gray"]
+  },
+  "categorical": {
+    "jsac": ["#ED1C24", "#306599", "#FCC218", "#4BB96E", "#656599", "#A7AAAC", "#F16667"],
+    "jlt": ["#C71400", "#226E94", "#6CA714", "#F7AC16", "#FE4A55", "#15B2D1"],
+    "access": ["#B45703", "#307630", "#563E72", "#BBBB00", "#FF0000"]
   }
 }

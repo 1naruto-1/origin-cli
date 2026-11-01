@@ -42,15 +42,17 @@ def cmd_build(a):
 def cmd_export(a):
     from .draw import export_graph
     from .origin import Session
+    from .spec import strip_ext
     src = Path(a.opju).resolve()
-    out = str(Path(a.out).resolve().with_suffix('')) if a.out else str(src.with_suffix(''))
+    out = strip_ext(Path(a.out).resolve() if a.out else src)
     formats = [f.strip().lower() for f in a.fmt.split(',') if f.strip()]
     with Session(mode=a.mode) as s:
         s.op.open(str(src), readonly=True)
         g = _graph(s, a.graph)
         width_cm = g.get_float('width') / g.get_float('resx') * 2.54
         files = export_graph(g, out, formats, a.dpi, width_cm)
-    _out({'files': files, 'graph': g.name, 'mode': s.mode, 'notes': s.notes})
+        name = g.name
+    _out({'files': files, 'graph': name, 'mode': s.mode, 'notes': s.notes})
 
 
 def _graph(s, name):
@@ -76,6 +78,7 @@ def cmd_inspect(a):
 def cmd_lt(a):
     from .draw import export_graph
     from .origin import Session
+    from .spec import strip_ext
     src = Path(a.opju).resolve()
     with Session(mode=a.mode) as s:
         s.op.open(str(src), readonly=not a.save)
@@ -89,7 +92,7 @@ def cmd_lt(a):
         if a.save:
             s.op.save(str(src))
             width_cm = g.get_float('width') / g.get_float('resx') * 2.54
-            out['files'] = [str(src)] + export_graph(g, str(src.with_suffix('')), ['png'], a.dpi, width_cm)
+            out['files'] = [str(src)] + export_graph(g, strip_ext(src), ['png'], a.dpi, width_cm)
     _out(out)
 
 
@@ -97,8 +100,8 @@ def cmd_palette(a):
     from . import style
     pal = style.palettes()
     if a.action == 'list':
-        return _out({'heatmap': pal['heatmap'], 'families': pal['families'], 'order': pal['order']})
-    colors = pal['heatmap'].get(a.name) or pal['families'].get(a.name)
+        return _out({k: pal[k] for k in ('heatmap', 'families', 'categorical', 'order') if k in pal})
+    colors = pal['heatmap'].get(a.name) or pal['families'].get(a.name) or pal.get('categorical', {}).get(a.name)
     if not colors:
         raise ValueError(f'没有调色板 {a.name!r}')
     out = {'name': a.name, 'colors': colors}

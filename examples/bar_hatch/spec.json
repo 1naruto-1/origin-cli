@@ -1,0 +1,11 @@
+{
+  "output": "out/bar_hatch",
+  "preset": "jsac",
+  "panels": [
+    {"type": "bar", "caption": "(a)", "data": "data.csv",
+     "x": {"col": "load", "title": "Traffic load (Erlang)"},
+     "y": {"title": "Blocking probability"},
+     "encode": {"palette": "access", "pattern": "diag"},
+     "legend": {"frame": {"style": "dash", "width": 0.5}}}
+  ]
+}

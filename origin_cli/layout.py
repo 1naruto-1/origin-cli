@@ -134,49 +134,62 @@ def _bound(items, yr, H, need, side):
 
 
 def place_legend(frame, xr, yr, shapes, size, pos='auto', margin=0.12, side_gap=0.1, clear=0.08,
-                 step=None, fixed=False, floor=None, shift_weight=3.0, max_extend=0.6) -> dict:
+                 step=None, fixed=False, floor=None, shift_weight=3.0, max_extend=0.6, auto=('bottom', 'top'),
+                 parts=None) -> dict:
     """图例放在框内底部（或顶部）左右居中；与曲线/符号/柱重叠时，先在可接受范围内左右平移，
     再把纵轴往图例一侧延长留出空白。返回 pos、offset（cm，相对框中心）、新的 y 范围、是否仍重叠。
 
     frame=(W, H) cm；xr、yr 为坐标范围；size=(lw, lh) cm；fixed=True 时不改纵轴范围；
-    floor 为纵轴下限不能越过的值（柱状图的基线）。"""
+    floor 为纵轴下限不能越过的值（柱状图的基线）。
+    pos：auto / bottom / top / top-left / top-right / bottom-left / bottom-right；带 -left/-right 的贴角放、不平移。
+    auto 时依次试 auto 列表里的位置，越靠后代价越高。
+    parts：图例实际占用的几块矩形 (x, y, w, h)，相对整体左上角（cm）；缺省为整块。
+    带大括号的图例只有括号和组名那几行占地方，按块计算不会把空白处也当成占用。"""
     W, H = frame
     lw, lh = size
-    need = margin + lh + clear
+    parts = parts or [(0.0, 0.0, lw, lh)]
     max_shift = max((W - lw) / 2 - side_gap, 0.0)
     offsets = sorted({round(k * 0.05, 4) for k in range(-int(max_shift / 0.05), int(max_shift / 0.05) + 1)} | {0.0},
                      key=abs)
-    sides = ['bottom', 'top'] if pos == 'auto' else [pos]
     best = None
     span = yr[1] - yr[0]
     Y = lambda y: (y - yr[0]) / span * H
-    for side in sides:
-        for off in offsets:
-            a, b = W / 2 + off - lw / 2 - clear, W / 2 + off + lw / 2 + clear
-            lows, highs = _extent_in_span(shapes, a, b, xr, frame)
-            items = lows if side == 'bottom' else highs
-            bound = _bound(items, yr, H, need, side)
+    for rank, cand in enumerate(list(auto) if pos == 'auto' else [pos]):
+        side, _, align = cand.partition('-')
+        if side not in ('bottom', 'top') or align not in ('', 'left', 'right'):
+            raise ValueError(f'legend.pos 不认识 {cand!r}（可用 auto / bottom / top / top-left / top-right / bottom-left / bottom-right）')
+        for off in ([(-1 if align == 'left' else 1) * max_shift] if align else offsets):
+            left0, bounds, intrude = W / 2 + off - lw / 2, [], 0.0
+            for px, py, pw, ph in parts:
+                lows, highs = _extent_in_span(shapes, left0 + px - clear, left0 + px + pw + clear, xr, frame)
+                items = lows if side == 'bottom' else highs
+                need = margin + (lh - py if side == 'bottom' else py + ph) + clear       # 这一块离框边的距离
+                bounds.append(_bound(items, yr, H, need, side))
+                if side == 'bottom':
+                    intrude = max([intrude] + [need - (Y(y) - r) for y, r in items])
+                else:
+                    intrude = max([intrude] + [Y(y) + r - (H - need) for y, r in items])
             if side == 'bottom':
+                bound = min(bounds)
                 ok_now = bound >= yr[0]
                 new = yr if ok_now else (floor_to(bound, step / 2) if step else bound, yr[1])
                 if floor is not None and new[0] < floor - 1e-12:
                     new = None
-                intrude = max((need - (Y(y) - r) for y, r in items), default=0.0)
             else:
+                bound = max(bounds)
                 ok_now = bound <= yr[1]
                 new = yr if ok_now else (yr[0], ceil_to(bound, step / 2) if step else bound)
-                intrude = max((Y(y) + r - (H - need) for y, r in items), default=0.0)
             ext = 0.0 if new is None else ((new[1] - new[0]) - span) / span
             if new is None or (not ok_now and fixed) or ext > max_extend:
                 # 放不下：按侵入图例带的深度排序，留在原坐标范围
                 cost, new, overlap = 10.0 + max(intrude, 0) / H, yr, True
             else:
                 cost, overlap = ext, False
-            cost += shift_weight * abs(off) / W + (0.15 if side == 'top' else 0)
-            cand = {'pos': side, 'offset': off, 'y': tuple(new), 'extended': not overlap and ext > 0,
+            cost += (0 if align else shift_weight * abs(off) / W) + 0.15 * rank
+            item = {'pos': cand, 'offset': off, 'y': tuple(new), 'extended': not overlap and ext > 0,
                     'overlap': overlap, 'cost': cost}
             if best is None or cost < best['cost'] - 1e-9:
-                best = cand
+                best = item
     best.pop('cost')
     best['fits'] = lw + 2 * side_gap <= W and lh + 2 * margin <= H
     return best
@@ -186,5 +199,22 @@ def legend_center(frame, yr, placed, size, margin=0.12):
     """图例中心在框内的位置（cm，原点在框左下）。"""
     W, H = frame
     lh = size[1]
-    cy = margin + lh / 2 if placed['pos'] == 'bottom' else H - margin - lh / 2
+    cy = margin + lh / 2 if placed['pos'].startswith('bottom') else H - margin - lh / 2
     return W / 2 + placed['offset'], cy
+
+
+def brace_points(x, y_top, y_bot, w, n=4):
+    """向右开口的花括号（右侧尖端在中点），页面坐标（y 向下）。返回折线点列。"""
+    h = y_bot - y_top
+    r = min(w / 2, h / 6)
+    mid = (y_top + y_bot) / 2
+
+    def arc(cx, cy, a0, a1):
+        return [(cx + r * math.cos(math.radians(a0 + (a1 - a0) * k / n)),
+                 cy + r * math.sin(math.radians(a0 + (a1 - a0) * k / n))) for k in range(n + 1)]
+    xm = x + r                      # 竖直部分所在的位置
+    pts = arc(x, y_top + r, -90, 0)                             # 顶端弯向竖直段
+    pts += arc(xm + r, mid - r, 180, 90)                         # 竖直段弯向尖端
+    pts += arc(xm + r, mid + r, 270, 180)                        # 尖端弯回竖直段
+    pts += arc(x, y_bot - r, 0, 90)                              # 竖直段弯向底端
+    return pts
