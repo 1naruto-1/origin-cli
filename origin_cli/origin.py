@@ -113,6 +113,8 @@ class Session:
         import originpro as op
         self.op = op
         if self.mode == 'normal':
+            if not Path(CONFIG['origin_exe']).exists():
+                raise RuntimeError(f'找不到 Origin：{CONFIG["origin_exe"]}。在 skill 目录建 config.json，写上 origin_exe')
             self.proc = subprocess.Popen([CONFIG['origin_exe'], '-h'])
             t0 = time.time()
             while ' - ' not in _main_title(self.proc.pid):

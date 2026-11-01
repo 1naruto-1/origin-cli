@@ -30,7 +30,7 @@ spec 是一个 JSON 文件，描述一张图（一个 Origin 图页），图页�
 | `output` | 与 spec 同名，放在同目录 | 输出路径，不含扩展名。相对路径以 spec 所在目录为准。 |
 | `formats` | `["png"]` | 可选 `png` `tif` `jpg` `pdf` `svg` `emf` `eps`；PNG 总会生成（用来看图）。详见下文。 |
 | `dpi` | 600 | 位图分辨率。像素宽 = 页面宽(cm) / 2.54 × dpi。 |
-| `preset` | `"paper"` | `presets/` 下的预设名，或一个 .json 文件路径（相对路径以 spec 所在目录为准）。现有 `paper`（用户最早给的参考风格）和 `jsac`（学自 IEEE JSAC 文献，见 §13）。 |
+| `preset` | `"paper"` | `presets/` 下的预设名，或一个 .json 文件路径（相对路径以 spec 所在目录为准）。现有 `paper`（学自 `折线图/`、`热力图/` 的参考图）和 `jsac`（学自 IEEE JSAC 文献，见 §13）。 |
 | `style` | — | 对预设的逐项覆盖（深合并），见 §13。 |
 | `layout` | — | 多个子图的排法，见下表。 |
 | `data` | — | 各面板共用的数据；面板自己没写 `data` 时用它。 |

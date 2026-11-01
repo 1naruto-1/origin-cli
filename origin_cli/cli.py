@@ -10,9 +10,11 @@ def _out(obj):
 
 
 def cmd_doctor(a):
-    from .config import CONFIG
+    from . import __version__
+    from .config import CONFIG, SKILL_DIR
     from .origin import Session, origin_pids
-    info = {'origin_exe': CONFIG['origin_exe'], 'exists': Path(CONFIG['origin_exe']).exists(),
+    info = {'origin_cli': __version__, 'skill_dir': str(SKILL_DIR), 'python': sys.version.split()[0],
+            'origin_exe': CONFIG['origin_exe'], 'exists': Path(CONFIG['origin_exe']).exists(),
             'running_origin': sorted(origin_pids())}
     try:
         import originpro  # noqa: F401

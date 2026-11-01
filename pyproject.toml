@@ -1,9 +1,14 @@
 [project]
 name = "origin-cli"
-version = "0.1.0"
-description = "用本机 Origin 画科研数据图：按 spec 出图、导出、读回格式"
+version = "1.0.0"
+description = "用本机 Origin 画论文级科研数据图：按 JSON spec 出图、导出、读回格式，也是一个 Claude Code skill"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = ["originpro", "numpy", "pandas", "pillow", "openpyxl"]
+
+[project.urls]
+Homepage = "https://github.com/1naruto-1/origin-cli"
 
 [project.scripts]
 origin-cli = "origin_cli.cli:main"
