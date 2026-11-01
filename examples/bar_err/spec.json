@@ -1,0 +1,15 @@
+{
+  "output": "out/bar_err",
+  "layout": {"rows": [2]},
+  "panels": [
+    {"type": "bar", "caption": "(a)", "data": "bars.csv",
+     "x": {"col": "topology", "title": "Topology"},
+     "y": {"title": "Success probability"},
+     "series": [{"y": "Ours", "yerr": "Ours_std"}, {"y": "Base-A", "yerr": "Base-A_std"},
+                {"y": "Base-B", "yerr": "Base-B_std"}]},
+    {"type": "line", "caption": "(b)", "data": "lines.csv",
+     "x": {"col": "load", "title": "Traffic load /Erlang"},
+     "y": {"title": "Success probability"},
+     "series": [{"y": "Ours", "yerr": "Ours_std"}, {"y": "Base-A", "yerr": "Base-A_std"}]}
+  ]
+}

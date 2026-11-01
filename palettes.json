@@ -1,0 +1,22 @@
+{
+  "_note": "颜色均由浅到深。heatmap、families 中 blue/red/brown/teal/navy/warm 取自参考图（热力图/1–3、折线图/1–2）的像素；purple/gray 为补充色系",
+  "heatmap": {
+    "olive": ["#EFEB95", "#6E500D"],
+    "green": ["#CBEF95", "#006100"],
+    "ocean": ["#6EFCFC", "#004771"]
+  },
+  "families": {
+    "blue": ["#B0C4E0", "#6C8CB0", "#3C5878", "#1C304C"],
+    "red": ["#E8C0C0", "#D88C8C", "#A85050", "#682C2C"],
+    "brown": ["#D8B08C", "#A87850", "#68482C", "#3C2C1C"],
+    "teal": ["#88B07C", "#289C8C", "#287070"],
+    "navy": ["#209CBC", "#106480", "#003048"],
+    "warm": ["#E8A800", "#D47C28", "#A82C04"],
+    "purple": ["#D0C4E0", "#9C88B8", "#6A548C", "#3C2C58"],
+    "gray": ["#C8C8C8", "#8C8C8C", "#585858", "#2A2A2A"]
+  },
+  "order": {
+    "family": ["blue", "red", "brown", "teal", "navy", "warm", "purple", "gray"],
+    "group": ["teal", "navy", "warm", "blue", "red", "brown", "purple", "gray"]
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "skill_name": "origin-cli",
+  "evals": [
+    {
+      "id": 1,
+      "name": "heatmap-xlsx-green",
+      "prompt": "我有个 Excel：evals/files/heatmap_eta.xlsx，三个工作表 eta0.1、eta0.5、eta0.9 分别是 η=0.1/0.5/0.9 时四种策略（行）在不同 m（列）下的成功概率。照着 热力图/2.png 那种绿色的风格画成上中下三联热力图，子图标题像参考图那样写 (a) η = 0.1 这种，色标标题 Success Probability。导出 PNG 和 PDF。",
+      "expected_output": "3 幅上下排列的绿色热力图（4 行 × 7 列），每幅右侧有色标；格内 4 位小数白字；色标下限三幅共用、上限各自取最大值；子图标题 (a)(b)(c) 中 η 为斜体；数据与 Excel 一致；输出 .opju、PNG、PDF。",
+      "files": ["evals/files/heatmap_eta.xlsx", "热力图/2.png"],
+      "expectations": [
+        "生成了 .opju、.png 和 .pdf 三个文件",
+        "图中有 3 幅热力图，上下排列，每幅都有自己的色标",
+        "使用了 green 配色（#CBEF95 → #006100）",
+        "三幅热力图的色标下限相同，上限各不相同（各取本幅最大值）",
+        "格内数值与 Excel 数据一致（抽查若干格），保留 4 位小数",
+        "子图标题为 (a)(b)(c) 且包含 η = 0.1/0.5/0.9，η 为斜体",
+        "执行者打开 PNG 看过成图"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "line-inset-group-colors",
+      "prompt": "参照 折线图/2.png 的风格，用 evals/files/eta_success.csv 画一张点线图：三种方法 Proposed / Greedy / Random 在 η=0.2 和 η=0.6 两种情况下成功率随业务量（load，单位 Erlang）的变化，配色像参考图那样每个 η 一套颜色。在 load=60 附近加一个局部放大的小图，再在曲线右端用竖线标出 η=0.6 时 Proposed 相对 Random 的提升百分比。",
+      "expected_output": "单个面板的点线图：形状按方法、按 η 分色系（group 模式）；η=0.6 的符号更大更空、用短划线；load=60 附近有虚线圈 + 箭头 + 插图；右端有带百分比文字的竖向括注，百分比按数据计算（load=90：(0.9359-0.862)/0.862 ≈ 8.6%）；图例在框内且不压线。",
+      "files": ["evals/files/eta_success.csv", "折线图/2.png"],
+      "expectations": [
+        "生成了 .opju 和 .png",
+        "配色为按 η 分色系（encode.color = group）",
+        "形状按方法区分，η=0.6 组的符号比 η=0.2 组更大且为空心/半填充（无填充），线型为 Short Dash 系列之一",
+        "所有曲线线宽为 0.37",
+        "有局部放大插图，范围覆盖 load=60 附近，主图上有虚线圈和指向插图的箭头",
+        "有竖向括注，文字为 η=0.6 时 load=90 处 Proposed 相对 Random 的提升，数值约 8.6%（按数据计算）",
+        "图例在坐标框内，build 输出中没有图例重叠的警告",
+        "执行者打开 PNG 看过成图"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "errorbar-single-column-tif",
+      "prompt": "我跑了 5 次仿真，evals/files/latency.csv 里是 Ours、DSR、AODV 三种路由在节点数 50~300 下的平均端到端时延（ms）和标准差（*_std 列）。帮我画成带误差棒的点线图投稿用，期刊要求单栏宽度大约 8.5 cm，600 dpi 的 TIF。",
+      "expected_output": "单面板点线图，三条曲线带误差棒（与曲线同色）；页面宽度约 8.5 cm；导出 600 dpi TIF（以及 PNG、.opju）；坐标标题含单位；图例在框内且不压线。",
+      "files": ["evals/files/latency.csv"],
+      "expectations": [
+        "生成了 .opju、.png 和 .tif，TIF 的 dpi 为 600",
+        "页面宽度在 8.0–9.0 cm 之间",
+        "三条曲线都带误差棒，误差值来自 *_std 列",
+        "只有方法一个维度：三条曲线形状、颜色各不相同，均为实心实线",
+        "纵轴标题包含时延和单位 ms，横轴标题包含节点数",
+        "图例在坐标框内，不与曲线或误差棒重叠",
+        "执行者打开 PNG 看过成图"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "grouped-bar-axis-break",
+      "prompt": "evals/files/throughput.csv 是四种方案在三种拓扑下的网络吞吐量（Gbps）。Ours 在 NSFNET 上特别高，直接画的话其他柱子都被压扁了。帮我画分组柱状图，纵轴加个断轴让小的柱子也能看清差别。",
+      "expected_output": "分组柱状图：横轴为三个拓扑名（分类轴），每簇四根柱并排；纵轴有一处断轴（断开约 500–1150 之间），断点下方能看清 240–460 的差别；图例在框内不压柱；数据如实。",
+      "files": ["evals/files/throughput.csv"],
+      "expectations": [
+        "生成了 .opju 和 .png",
+        "横轴为 NSFNET / USNET / COST239 三个分类标签",
+        "每个拓扑处四根柱并排（分组），颜色各不相同",
+        "纵轴有断轴，断开区间位于约 460 与 1250 之间，1250 的柱顶仍在图内",
+        "纵轴从 0 开始，未篡改或删除数据",
+        "图例在坐标框内，不与柱子重叠",
+        "执行者打开 PNG 看过成图"
+      ]
+    }
+  ]
+}

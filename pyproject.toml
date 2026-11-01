@@ -1,0 +1,19 @@
+[project]
+name = "origin-cli"
+version = "0.1.0"
+description = "用本机 Origin 画科研数据图：按 spec 出图、导出、读回格式"
+requires-python = ">=3.10"
+dependencies = ["originpro", "numpy", "pandas", "pillow", "openpyxl"]
+
+[project.scripts]
+origin-cli = "origin_cli.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["origin_cli"]
+
+[tool.setuptools.package-data]
+origin_cli = ["fmt.c"]

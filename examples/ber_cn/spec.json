@@ -1,0 +1,30 @@
+{
+ "output": "out/ber_cn",
+ "panels": [
+  {
+   "type": "line",
+   "data": "ber.csv",
+   "x": {
+    "col": "snr",
+    "title": "信噪比 \\i(E)\\-(b)/\\i(N)\\-(0) (dB)"
+   },
+   "y": {
+    "title": "误码率",
+    "scale": "log"
+   },
+   "matrix": {
+    "names": [
+     "所提方案",
+     "方案 A",
+     "方案 B"
+    ],
+    "groups": [
+     "AWGN",
+     "Rayleigh"
+    ],
+    "col": "{name}|{group}",
+    "label": "{group}"
+   }
+  }
+ ]
+}

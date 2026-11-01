@@ -1,0 +1,21 @@
+{
+  "output": "out/line_omega",
+  "layout": {"rows": [1, 2]},
+  "panels": [
+    {"type": "line", "caption": "(a)", "data": "a.csv",
+     "x": {"col": "load", "title": "Traffic load /Erlang"},
+     "y": {"title": "Success probability"},
+     "matrix": {"names": ["DA-KSE", "Benchmark-1", "Benchmark-2"], "groups": [10, 20, 30, 40],
+                "col": "{name}_{group}", "label": "\\i(ω)\\-(e) = {group}"}},
+    {"type": "line", "caption": "(b)", "data": "b.csv",
+     "x": {"col": "load", "title": "Traffic load /Erlang"},
+     "y": {"title": "Success probability"},
+     "matrix": {"names": ["DA-KSE", "Benchmark-1", "Benchmark-2"], "groups": [10, 20, 30, 40],
+                "col": "{name}_{group}", "label": "\\i(ω)\\-(e) = {group}"}},
+    {"type": "line", "caption": "(c)", "data": "c.csv",
+     "x": {"col": "load", "title": "Traffic load /Erlang"},
+     "y": {"title": "Success probability"},
+     "matrix": {"names": ["DA-KSE", "Benchmark-1", "Benchmark-2"], "groups": [10, 20, 30, 40],
+                "col": "{name}_{group}", "label": "\\i(ω)\\-(e) = {group}"}}
+  ]
+}

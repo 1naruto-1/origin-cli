@@ -1,0 +1,34 @@
+{
+ "output": "out/bar_overlap",
+ "panels": [
+  {
+   "type": "bar",
+   "mode": "overlap",
+   "caption": "(a)",
+   "data": "data.csv",
+   "x": {
+    "col": "load",
+    "title": "Traffic load (Erlangs)",
+    "step": 20
+   },
+   "y": {
+    "title": "Key resource utilization"
+   },
+   "matrix": {
+    "names": [
+     "Benchmark1",
+     "Benchmark2",
+     "SLDR",
+     "MSLDR"
+    ],
+    "groups": [
+     "Intra-domain",
+     "Global",
+     "Inter-domain"
+    ],
+    "col": "{name}|{group}",
+    "label": "{group}"
+   }
+  }
+ ]
+}

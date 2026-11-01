@@ -1,0 +1,22 @@
+{
+  "_note": "学自参考图（热力图/、折线图/）的默认风格。长度单位 cm，字号与线宽单位 pt；spec 里的 style 可逐项覆盖",
+  "font": {"face": "Times New Roman", "cjk": "宋体", "size": 7.5, "title": 8.5},
+  "axis": {"thickness": 0.75, "tick_length": 3, "tick_width": 0.75, "ticks": "in", "minor": 0},
+  "line": {"width": 0.37, "symbol": 3, "symbol_step": 1},
+  "legend": {"size": 6.5, "min_size": 5.5, "margin": 0.12, "side_gap": 0.1, "clear": 0.05,
+             "symbol_width": 60, "tab": 2, "line_space": -15},
+  "panel": {
+    "line": {"frame": [6.2, 4.9], "margin": [1.25, 0.2, 0.3, 0.95]},
+    "bar": {"frame": [6.2, 4.9], "margin": [1.25, 0.2, 0.3, 0.95]},
+    "heatmap": {"frame": [9.0, 2.2], "row_height": 0.733, "margin": [0.75, 0.1, 1.55, 0.95]}
+  },
+  "caption": {"size": 9, "gap": 0.1, "height": 0.45},
+  "layout": {"gap": [0.35, 0.15], "outer": 0.1},
+  "bar": {"gap": 30, "border": "#1A1A1A", "border_width": 0.5},
+  "errorbar": {"cap": 4},
+  "heatmap": {"palette": "olive", "levels": 64, "cell_decimals": 4, "cell_color": "auto", "cell_size": 6.5,
+              "grid": "#FFFFFF", "grid_width": 0.75, "ticks": "out",
+              "colorbar": {"gap": 0.45, "width": 0.25, "ticks": 6, "decimals": 3, "size": 6.5}},
+  "inset": {"size": 6, "tick_length": 2},
+  "mark": {"width": 0.75, "size": 7}
+}

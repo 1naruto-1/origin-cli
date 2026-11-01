@@ -1,0 +1,36 @@
+{
+  "output": "out/line_eta_inset",
+  "layout": {"rows": [1, 2]},
+  "panels": [
+    {"type": "line", "caption": "(a)", "data": "a.csv",
+     "x": {"col": "load", "title": "Traffic load /Erlang"},
+     "y": {"title": "Success probability", "step": 0.05},
+     "matrix": {"names": ["DA-KSE", "Benchmark-1", "Benchmark-2"], "groups": ["0.1", "0.5", "0.9"],
+                "col": "{name}_{group}", "label": "\\i(η) = {group}"},
+     "encode": {"color": "group"},
+     "inset": {"x": [57, 63], "y": [0.898, 0.914], "box": [0.02, 0.4, 0.5, 0.38]},
+     "marks": [
+       {"type": "bracket", "x": 91.5, "y": [0.776, 0.920], "text": "18.2%", "color": "#9C8A3C"},
+       {"type": "bracket", "x": 93.6, "y": [0.771, 0.920], "text": "19.4%", "color": "#8B2E2E"}]},
+    {"type": "line", "caption": "(b)", "data": "b.csv",
+     "x": {"col": "load", "title": "Traffic load /Erlang"},
+     "y": {"title": "Success probability", "step": 0.05},
+     "matrix": {"names": ["DA-KSE", "Benchmark-1", "Benchmark-2"], "groups": ["0.1", "0.5", "0.9"],
+                "col": "{name}_{group}", "label": "\\i(η) = {group}"},
+     "encode": {"color": "group"},
+     "inset": {"x": [67, 73], "y": [0.905, 0.927], "box": [0.02, 0.4, 0.5, 0.38]},
+     "marks": [
+       {"type": "bracket", "x": 91.5, "y": [0.788, 0.872], "text": "9.9%", "color": "#9C8A3C"},
+       {"type": "bracket", "x": 93.6, "y": [0.782, 0.872], "text": "11.8%", "color": "#8B2E2E"}]},
+    {"type": "line", "caption": "(c)", "data": "c.csv",
+     "x": {"col": "load", "title": "Traffic load /Erlang"},
+     "y": {"title": "Success probability", "step": 0.05},
+     "matrix": {"names": ["DA-KSE", "Benchmark-1", "Benchmark-2"], "groups": ["0.1", "0.5", "0.9"],
+                "col": "{name}_{group}", "label": "\\i(η) = {group}"},
+     "encode": {"color": "group"},
+     "inset": {"x": [47, 53], "y": [0.928, 0.946], "box": [0.02, 0.4, 0.5, 0.38]},
+     "marks": [
+       {"type": "bracket", "x": 91.5, "y": [0.897, 0.935], "text": "4.2%", "color": "#9C8A3C"},
+       {"type": "bracket", "x": 93.6, "y": [0.784, 0.935], "text": "19.9%", "color": "#8B2E2E"}]}
+  ]
+}
