@@ -1,11 +1,36 @@
 {
-  "output": "out/bar_hatch",
-  "preset": "jsac",
-  "panels": [
-    {"type": "bar", "caption": "(a)", "data": "data.csv",
-     "x": {"col": "load", "title": "Traffic load (Erlang)"},
-     "y": {"title": "Blocking probability"},
-     "encode": {"palette": "access", "pattern": "diag"},
-     "legend": {"frame": {"style": "dash", "width": 0.5}}}
-  ]
+ "output": "out/bar_hatch",
+ "preset": "jsac",
+ "style": {
+  "axis": {
+   "ticks": "out"
+  }
+ },
+ "panels": [
+  {
+   "type": "bar",
+   "data": "data.csv",
+   "x": {
+    "col": "load",
+    "title": "Traffic load (Erlang)"
+   },
+   "y": {
+    "title": "Blocking probability",
+    "grid": false
+   },
+   "encode": {
+    "palette": "access",
+    "pattern": [
+     "diag_dense",
+     "back_dense"
+    ]
+   },
+   "legend": {
+    "frame": {
+     "style": "dash",
+     "width": 0.5
+    }
+   }
+  }
+ ]
 }

@@ -33,10 +33,17 @@ def ceil_to(v: float, step: float) -> float:
 
 
 def x_axis(values, step=None, target=7) -> dict:
-    """横轴：两端各留半个刻度间距（参考图 20–90 → 15–95），首个刻度在数据起点。"""
+    """横轴两端留白：数据等距时留半个数据间距（至少四分之一刻度），否则留半个刻度。
+    参考图 20–90、间距 10 → 15–95；JSAC Fig.8 15–165、间距 15、刻度 30 → 7.5–172.5。"""
     lo, hi = min(values), max(values)
     step = step or nice_step(hi - lo, target)
-    return {'from': lo - step / 2, 'to': hi + step / 2, 'step': step, 'first': first_tick(lo, step)}
+    ux = sorted(set(values))
+    pad = step / 2
+    if len(ux) > 2:
+        dx = min(b - a for a, b in zip(ux, ux[1:]))
+        if dx > 0 and all(abs((u - lo) / dx - round((u - lo) / dx)) < 1e-6 for u in ux):
+            pad = min(step / 2, max(dx / 2, step / 4))
+    return {'from': lo - pad, 'to': hi + pad, 'step': step, 'first': first_tick(lo, step)}
 
 
 def y_axis(lo: float, hi: float, step=None, target=5, baseline=None) -> dict:

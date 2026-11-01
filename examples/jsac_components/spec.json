@@ -4,7 +4,6 @@
  "panels": [
   {
    "type": "line",
-   "caption": "(a)",
    "data": "data.csv",
    "x": {
     "col": "requests",

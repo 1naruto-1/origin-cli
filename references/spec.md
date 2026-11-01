@@ -200,13 +200,13 @@ group 数多于色系的档数时，在色系内插值；少于档数时，取�
 | `step` | 主刻度间距。默认按数据范围自动取 1/2/2.5/5×10ⁿ。 |
 | `range` | `[起, 止]`，固定坐标范围。固定后，图例不会再为了让位去延长纵轴。 |
 | `first` | 第一个刻度的位置。 |
-| `decimals` | 刻度值的小数位数。默认与 step 的小数位数一致。 |
+| `decimals` | 刻度值的小数位数。默认与 step 的小数位数一致；断轴两段间距的位数不同时，两段各自定位数。写了 `decimals` 则全轴统一。 |
 | `scale` | 写 `"log"` 为对数轴。范围取整十倍，每十倍一个刻度，刻度值显示为 10ⁿ 形式。数据须为正数。 |
-| `factor` | 纵轴专用。整数 n：刻度值除以 10ⁿ 显示，框左上方写 ×10ⁿ；`"auto"`：数值上万时自动选 n，让刻度值只留一两位整数；`null`：不用。默认取预设（jsac 为 auto，paper 不用）。只改显示，数据不变。 |
+| `factor` | 纵轴专用。整数 n：刻度值除以 10ⁿ 显示，框左上方写 ×10ⁿ；`"auto"`：数值上千时自动选 n，让刻度值只留一两位整数；`null`：不用。默认取预设（jsac 为 auto，paper 不用）。只改显示，数据不变。 |
 | `grid` | `true`/`false` 开关主刻度网格线，或写 `{"color", "style", "width"}` 覆盖。默认取预设 `axis.grid`（jsac 有，paper 无）；柱状图默认不画竖线。 |
 
 自动范围的规则：
-- 横轴两端各留半个刻度间距。数据横坐标等距、且与刻度间距成整数倍时，刻度对齐到数据点（如 15, 45, 75…）。
+- 横轴两端留白：数据等距时留半个数据间距（至少四分之一个刻度），否则留半个刻度。数据横坐标等距、且与刻度间距成整数倍时，刻度对齐到数据点（如 15, 45, 75…）。
 - 柱状图的横轴刻度间距默认取数据间距（每簇一个刻度）。
 - 纵轴上下各留约 0.35 个刻度间距；刻度个数由预设 `axis.y_ticks` 决定（paper 约 5 个，jsac 约 7 个）。
 - 柱状图的纵轴从 0 开始。
@@ -297,10 +297,15 @@ n 的编号规则：
 - 均值大的 group 先画，排在后面，颜色浅；
 - 均值小的画在前面，颜色深。
 
-柱子的配色规则与点线图相同。花纹：`encode.pattern`（整个面板）或单条的 `pattern`，可选 `diag`（斜线，RCWA 文献的样式）、`diag_dense`、`back`（反斜线）、`cross`（斜网格）、`horizontal`、`vertical`、`none`。花纹画在填充色上、用边框色，黑白打印也能分清各方案。
+柱子的配色规则与点线图相同。
+
+花纹画在填充色上、用边框色，黑白打印也能分清各方案：
+- 种类：`diag`（斜线 /）、`back`（反斜线 \）、`cross`（斜网格）、`horizontal`、`vertical`；`none` 为无。
+- 每种有三档疏密：加后缀 `_dense` 为密，`_sparse` 为疏，如 `diag_dense`、`back_sparse`。这已是 Origin 内置花纹的全部档位，密档仍比 RCWA 原图稀。
+- 写在 `encode.pattern`（整个面板）或单条的 `pattern`。`encode.pattern` 写成列表时按 name 轮换，如 `["diag_dense", "back_dense"]` 得到斜线、反斜线交替（RCWA 文献的样式）。
 
 其他外观由预设的 `bar` 一节控制：
-- 横轴不画刻度（刻度在簇中央，会压在柱子的分界线上）；
+- 横轴刻度：刻度朝内时不画（会压在柱子的分界线上）；`style.axis.ticks` 为 `out` 时画朝外的主刻度（簇中央），有次刻度时次刻度落在两簇之间（RCWA 文献的样式）；
 - 边框颜色：`border`，默认 #1A1A1A；
 - 边框宽度：`border_width`，默认 0.5 pt；
 - 簇间距：`gap`，默认 30%。
@@ -311,7 +316,7 @@ n 的编号规则：
 
 ```json
 {"type": "bar", "data": "data.csv", "x": {"col": "ratio", "title": "..."},
- "y": {"title": "Blocking probability", "range": [0.05, 0.4]},
+ "y": {"title": "Blocking probability", "range": [0, 0.5]},
  "series": [{"y": "BP_XTP", "name": "RCWA-XTP"}, {"y": "BP_SP", "name": "RCWA-SP"}],
  "y2": {"title": "Key utilization", "range": [0.4, 1.0], "step": 0.1, "hint": true,
         "series": [{"y": "KU_XTP", "name": "RCWA-XTP"}, {"y": "KU_SP", "name": "RCWA-SP"}]}}
@@ -322,7 +327,7 @@ n 的编号规则：
 | `series` / `matrix` | 必填其一 | 右轴的曲线，写法同 §3，与左轴共用面板的数据和横轴。 |
 | `type` | `line` | `line` 或 `scatter`（右轴不画柱）。 |
 | `title`、`range`、`step`、`decimals`、`scale`、`factor` | 自动 | 同 §5。 |
-| `hint` | `false` | 写 `true` 时用虚线圈住右轴曲线的末端，再用箭头指向右纵轴，提示这些线读右边的刻度。 |
+| `hint` | `false` | 写 `true` 时用虚线圈住右轴曲线的末端，再用箭头指向右纵轴，提示这些线读右边的刻度。圈的高度为末端各点的范围加上下各 3% 轴高；图例会避开圈和箭头，实在避不开时 `warnings` 里报重叠，这时调 `y2.range` 让末端离开图例。 |
 
 - 左右两轴一起分配样式：同名的柱和曲线同色，读者能把同一方法的两项指标对应起来。
 - 图例默认左右各一个（`legend.layout: "split"`），分放两侧的角上，第二个会避开第一个；写 `"layout": "matrix"` 合成一个图例，按轴分行，行首为轴标题。
@@ -440,7 +445,7 @@ n 的编号规则：
 | 键 | 内容 |
 |---|---|
 | `font` | `face`（西文字体）、`cjk`（中文字体）、`size`（刻度值字号）、`title`（轴标题字号）。 |
-| `axis` | `thickness`（轴线粗细）、`tick_length`、`tick_width`、`ticks`（`in`/`out`/`none`）、`minor`（次刻度个数）、`grid`（网格：`color`、`style`、`width`）、`factor`（`auto` 或整数）、`y_ticks`（纵轴大约几个刻度）。 |
+| `axis` | `thickness`（轴线粗细）、`tick_length`、`tick_width`、`ticks`（`in`/`out`/`none`）、`minor`（相邻主刻度之间的次刻度个数，方向同主刻度；对数轴为每十倍 8 个）、`grid`（网格：`color`、`style`、`width`）、`factor`（`auto` 或整数）、`y_ticks`（纵轴大约几个刻度）、`title_gap`（纵轴标题再往外移多少 cm）。 |
 | `encode` | 各面板 `encode` 的默认值（§4），如 jsac 的分类配色和形状、线型顺序。 |
 | `line` | `width`（线宽）、`symbol`（第一组符号大小）、`symbol_step`（每组增量）。 |
 | `legend` | `size`、`min_size`、`margin`（距框边）、`side_gap`、`clear`（与数据的间隙）、`symbol_width`（符号宽度，% 字宽）、`tab`、`line_space`、`columns`、`layout`、`frame`、`auto`（自动定位依次尝试的位置）、`brace`（大括号的 `width`、`gap`、`size`、`line_width`、`color`）。 |
@@ -463,6 +468,8 @@ spec 管不到的细节，可以用 LabTalk 处理：
 - 面板的 `labtalk`：在该面板的图层上执行，`layer.*`、`legend` 等都指向这个面板。
 - 顶层的 `labtalk`：在全部画完后，在图页上执行。
 
+Origin 不认识的命令会让 `warnings` 里出现“labtalk 第 n 条执行失败”。但属性名写错（如 `layer.x.tiks`）或对象不存在时，Origin 静默忽略、不报错，改完要看图，或用 `lt --get`、`inspect` 核对。
+
 常用属性和已知的坑见 [labtalk.md](labtalk.md)。
 
 改已有的成品：
@@ -475,6 +482,7 @@ origin-cli lt out/fig5.opju --layer 2 --run "layer.y.to=1.05;" --get "layer.y.fr
 
 ```json
 {"files": [".../fig5.opju", ".../fig5.png", ".../fig5.pdf"],
+ "graph": "Graph1",
  "page_cm": [16.05, 6.7],
  "mode": "normal",
  "warnings": [],
@@ -486,6 +494,7 @@ origin-cli lt out/fig5.opju --layer 2 --run "layer.y.to=1.05;" --get "layer.y.fr
                          "dash": "solid", "width": 0.37}]}]}
 ```
 
+- `graph`：图页的短名，`lt` 命令的 `--graph` 和 LabTalk 里引用图页时用。
 - `mode`：`normal` 表示隐藏的普通实例，导出的图正常。`automation` 时，导出的图文字上方可能有横线，处理方法见 SKILL.md。
 - 有插图时，面板里还有 `inset`（插图框位置、椭圆、箭头终点）。
 - 标注文字伸出坐标框时，`warnings` 里会提示。

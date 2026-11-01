@@ -82,7 +82,7 @@ description: 用本机 Origin（OriginPro）画论文级科研数据图：点线
 - **期刊栏宽**：写 `"layout": {"width": 8.5}`（双栏 17.5），坐标框会自动放大或缩小铺满这个宽度，字号和线宽不变。不要事后缩放图片。
 - **误差棒**：在 series 里写 `"yerr": "列名"`，或在 matrix 里写 `"yerr": "{name}_{group}_std"`。
 - **分类横轴**：横轴列是文字（方法名、拓扑名等）时，自动按类别等距排开。
-- **风格预设**：默认 `paper` 是用户最早给的参考风格（Times 字体、图例底部居中无边框）。写 `"preset": "jsac"` 换成学自 IEEE JSAC 文献的风格：Arial、刻度朝外、浅灰网格、带框图例放角上、亮色按方法配色、组名用大括号标出、大数值自动写成 ×10ⁿ。用户没指定时用 `paper`。
+- **风格预设**：默认 `paper` 是用户最早给的参考风格（Times 字体、图例底部居中无边框）。写 `"preset": "jsac"` 换成学自 IEEE JSAC 文献的风格：Arial、刻度朝内带次刻度、浅灰网格、带框图例放角上、亮色按方法配色、组名用大括号标出、大数值自动写成 ×10ⁿ。用户没指定时用 `paper`。
 - **双纵轴**：面板里写 `y2`（标题、范围、自己的 series 或 matrix），画在右轴上，与左轴共用横轴；同名的柱和曲线自动同色，图例默认左右各一个。
 - **全部字段**见 [references/spec.md](references/spec.md)。画断轴、对数轴、插图、标注、柱状图或热力图之前，先读里面对应的小节。
 - **现成的完整例子**在 `examples/` 里。每个目录有 spec.json 和数据，多数还附有原参考图 ref.png。找最像的一个来改最快：
@@ -98,8 +98,8 @@ description: 用本机 Origin（OriginPro）画论文级科研数据图：点线
 | `heatmap_olive` / `heatmap_green` / `heatmap_ocean` | 三联热力图 |
 | `jsac_components` | JSAC 风格：颜色跟方法、两组用实心/空心区分，大括号分组的图例，×10⁵（复刻文献 Hybrid relay Fig.8a） |
 | `jsac_cost` | JSAC 风格：只画符号或只画线的系列、双向箭头标提升百分比（复刻 Fig.6a） |
-| `combo_dual_axis` | 柱 + 线的双纵轴组合，花纹柱，左右两个图例，虚线圈 + 箭头指向右轴（复刻文献 RCWA Fig.5a） |
-| `bar_hatch` | 花纹填充的分组柱、虚线框图例（复刻 RCWA Fig.3a） |
+| `combo_dual_axis` | 柱 + 线的双纵轴组合，斜线 / 反斜线交替的花纹柱，左右两个图例，虚线圈 + 箭头指向右轴（复刻文献 RCWA Fig.5a；左轴按规则从 0 起，原图从 0.05 起） |
+| `bar_hatch` | 花纹填充的分组柱、刻度朝外、虚线框图例（复刻 RCWA Fig.3a） |
 | `bar_break_twoscale` | 两种量级的断轴柱状图，柱子在断口处断开（复刻文献 Time-scheduled QKD Fig.19） |
 
 ### 3. build，然后看图
@@ -138,6 +138,7 @@ origin-cli build spec.json
   - 用面板的 `labtalk` 字段，它在画完该面板后执行；
   - 或者对成品执行 `lt --save`。
   - 可用的属性和坑见 [references/labtalk.md](references/labtalk.md)。
+  - Origin 对写错的属性名不报错，改完一定要看图确认生效。
 
 ### 5. 交付
 
@@ -214,11 +215,12 @@ origin-cli build spec.json
 ### JSAC 预设（`"preset": "jsac"`）
 
 学自 Cao 等, IEEE JSAC 2021 的 Origin 矢量原图（尺寸按印刷大小量得），细节和理由见 style-guide.md 第 5 节。
-- **字体与坐标**：Arial，刻度值 6.4 pt、标题 7.2 pt；刻度朝外，浅灰短虚线网格；框 5.07 × 4.1 cm。
+- **字体与坐标**：Arial，刻度值 6.4 pt、标题 7.2 pt；刻度朝内、主刻度间带一个次刻度，浅灰短虚线网格；框 5.07 × 4.1 cm。
 - **配色**：颜色跟着 name（亮色分类配色 jsac）；两组之间第一组为实心小符号 + 短虚线，第二组为空心大符号 + 实线。
 - **图例**：带细框、白底，放在角上（优先左上）；有两组时排成一列，每组右侧用大括号标出组名。
-- **大数值**：上万时刻度值自动除以 10ⁿ，框左上方写 ×10ⁿ。
+- **大数值**：上千时刻度值自动除以 10ⁿ，框左上方写 ×10ⁿ（如 28 ×10²）。
 - **柱状图**：同一套配色；可加花纹（`encode.pattern`）。
+- **子图标题**：IEEE 论文的 (a)(b) 一般由 LaTeX 子图标题给出，这类图不在图里画 (a)；需要时再写 `caption`。
 
 ## 学习新的参考风格
 

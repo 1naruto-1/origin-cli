@@ -34,7 +34,8 @@ def cmd_build(a):
         fig = Figure(s, sp)
         fig.render()
         files = fig.export()
-        out = {'files': files, 'page_cm': list(fig.page), 'mode': s.mode, 'warnings': fig.warnings + s.notes,
+        out = {'files': files, 'graph': fig.g.name, 'page_cm': list(fig.page), 'mode': s.mode,
+               'warnings': fig.warnings + s.notes,
                'panels': fig.panels}
     _out(out)
 
@@ -88,6 +89,7 @@ def cmd_lt(a):
             s.lt(f'page.active = {a.layer};')
         for script in a.run or []:
             s.lt(script)
+        s.lt('doc -uw;')                # 刷新后再读值、保存和导出
         out = {'graph': g.name, 'values': {e: s.text(e) for e in (a.get or '').split(',') if e.strip()}}
         if a.save:
             s.op.save(str(src))

@@ -177,6 +177,8 @@ plotxy iy:=[Book]Sheet!((1,2,3),(1,4,5),(1,6,7)) plot:=203 ogl:=[Graph]1!;
 
 **花纹**：`Pattern/Fill/Pattern/Style` 的编号每三档一种（密、中、疏）：1–3 斜线 `/`，4–6 反斜线 `\`，7–9 斜网格，10–12 横线，13–15 竖线；0 为无。`PatternColor` 为花纹颜色，`FillColor` 仍是底色。
 
+- 最密一档在 600 dpi 下线距约 46 px，仍比 RCWA 原图（约 19 px）稀。格式树里的 `Pattern/XScale`、`YScale` 能写进去、读回也对，但对内置花纹不起作用。要更密只能在 Origin 里换自定义花纹。
+
 **偶发的设置不生效**：plotxy 刚画完时，偶尔取到的柱对象读回的格式树是空的，设置颜色也没有效果（导出图是 Origin 默认的浅色柱、彩色边框）。plotxy 之后先 `doc -uw;` 再取曲线对象，设置后读回 `Pattern/Fill/FillColor` 确认，不在就刷新后再设一次。
 
 **分类横轴**：X 列写成文本列即可。Origin 按行号 1..n 定位，并用这列文字作刻度标签（`layer.x.label.type = 2`）。此后再设置 `numFormat` 也不会把标签改回数字。
@@ -187,7 +189,7 @@ plotxy iy:=[Book]Sheet!((1,2,3),(1,4,5),(1,6,7)) plot:=203 ogl:=[Graph]1!;
 
 ```
 layer.x.from=..; layer.x.to=..; layer.x.inc=..; layer.x.firstTick=..; layer.x.minorTicks=0;
-layer.x.ticks=1;            // 1 朝内，2 朝外，0 无
+layer.x.ticks=1;            // 1 主刻度朝内，2 朝外，0 无；再加 4（次刻度朝内）或 8（朝外），如 5 = 主次都朝内
 layer.x2.ticks=0;           // 上轴不要刻度
 layer.x.showAxes=3;         // 上下两条轴线都显示，形成封闭的框
 layer.x.label.font=..; layer.x.label.pt=..; layer.x.label.numFormat=1; layer.x.label.decPlaces=..;
@@ -333,6 +335,8 @@ draw -n D1 -l {x1, y1, x2, y2}; D1.color=color(#000000); D1.lineWidth=0.75; D1.l
 
 ## 12. 排查问题的习惯
 
-- **`op.lt_exec` 的返回值说明不了属性有没有设成功。** 只有命令本身不存在时它才返回 False；属性名写错会被静默忽略。设置之后，用 `lt --get`、`inspect` 或读格式树确认。
+- **改图层属性优先写在面板的 `labtalk` 字段**：它在图层上执行、可复现。`lt --run` 在应用层执行，虽然先切了活动图层，仍遇到过读回的值已改、导出图却没变的情况；现在 `lt` 在保存和导出前会先 `doc -uw` 刷新，仍不对就改用面板 `labtalk` 重新 build。
+
+- **`op.lt_exec` 的返回值说明不了属性有没有设成功。** 只有命令本身不存在时它才返回 False；属性名写错、对象不存在（如 `xb.left` 而图里没有 xb）都会被静默忽略。图层的 `lt_exec` 干脆不返回结果，要用 `L.obj.LT_execute` 拿返回值（build 执行 spec 里的 labtalk 时就是这样报失败的）。设置之后，用 `lt --get`、`inspect` 或读格式树确认。
 - **一次只验证一件事。** 把最小复现写成 spike 脚本，放在 `origin-cli-workspace/spike/` 下，用 `Session()` 打开 Origin，导出 PNG 来看效果。结论补充到本文。
 - **Origin 崩溃过一次后，先确认没有残留进程**，再开始下一次 build：工具启动时若发现 Origin 进程，会等待最多 8 秒。

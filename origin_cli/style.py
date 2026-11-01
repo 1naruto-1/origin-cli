@@ -15,8 +15,9 @@ INTERIORS = {'solid': 0, 'open': 1, 'dot': 2, 'hollow': 3, 'plus': 4, 'cross': 5
              'half_up': 8, 'half_right': 9, 'half_down': 10, 'half_left': 11}
 DASHES = {'solid': 0, 'dash': 1, 'dot': 2, 'dash_dot': 3, 'dash_dot_dot': 4,
           'short_dash': 5, 'short_dot': 6, 'short_dash_dot': 7}
-# 柱的花纹（格式树 Pattern/Fill/Pattern/Style；Origin 每种花纹有密、中、疏三档，这里取中档，diag_dense 为密档）
-PATTERNS = {'none': 0, 'diag_dense': 1, 'diag': 2, 'back': 5, 'cross': 8, 'horizontal': 11, 'vertical': 14}
+# 柱的花纹（格式树 Pattern/Fill/Pattern/Style）：每种花纹有密、中、疏三档，编号连续，如 diag_dense 1、diag 2、diag_sparse 3
+PATTERNS = {'none': 0, **{f'{k}{d}': 3 * i + j + 1 for i, k in enumerate(('diag', 'back', 'cross', 'horizontal', 'vertical'))
+                         for j, d in enumerate(('_dense', '', '_sparse'))}}
 
 SHAPE_ORDER = ['diamond', 'up', 'circle', 'square', 'down', 'hexagon', 'pentagon', 'star']
 DASH_ORDER = ['solid', 'short_dash', 'short_dash_dot', 'short_dot', 'dash', 'dash_dot', 'dot', 'dash_dot_dot']
@@ -112,7 +113,7 @@ def _unique(values) -> list:
 
 def encode(series: list, mode: str = 'auto', size: float = 3.0, size_step: float = 1.0, width: float = 0.37,
            families: list = None, group_order: list = None, palette=None, shapes: list = None,
-           dashes: list = None, pattern: str = None) -> list:
+           dashes: list = None, pattern=None) -> list:
     """series 为 [{'name':..., 'group':..., 可选覆盖项}]，返回每条的样式字典。
 
     mode：family（默认，有多个 group 时）/ group / categorical（只有 name 时）。
@@ -120,7 +121,8 @@ def encode(series: list, mode: str = 'auto', size: float = 3.0, size_step: float
     group_order：group 的递进顺序（由浅到深），缺省按出现顺序。
     palette：categorical 模式改用一组分类颜色（palettes.json 的 categorical，或颜色列表），每个 name 一色；
              有多个 group 时，group 只改填充、大小和线型（JSAC 文献的做法）。
-    shapes、dashes：形状、线型的使用顺序（覆盖默认）。pattern：柱的花纹。
+    shapes、dashes：形状、线型的使用顺序（覆盖默认）。
+    pattern：柱的花纹；写列表时按 name 轮换（如 ['diag_dense', 'back_dense'] 得到斜线、反斜线交替，文献 RCWA 的做法）。
     """
     names = _unique(s.get('name') for s in series)
     groups = _unique(s.get('group') for s in series if s.get('group') is not None)
@@ -152,7 +154,7 @@ def encode(series: list, mode: str = 'auto', size: float = 3.0, size_step: float
                  'interior': fills[gi] if multi else 'solid',
                  'size': size + size_step * (gi if multi else 1),
                  'dash': dash_order[gi % len(dash_order)] if multi else 'solid',
-                 'width': width, 'pattern': pattern or 'none'}
+                 'width': width, 'pattern': (pattern[ni % len(pattern)] if isinstance(pattern, list) else pattern) or 'none'}
         style.update({k: s[k] for k in STYLE_KEYS if s.get(k) is not None})
         check(style)
         out.append(style)

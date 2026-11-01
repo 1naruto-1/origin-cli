@@ -200,3 +200,23 @@ def test_preset_extends_and_y2(tmp_path):
     p = spec.load(tmp_path / 's.json')['panels'][0]
     assert p['series'][0]['group'] == 'η = 1' and p['series'][1]['pattern'] == 'cross'
     assert p['y2']['type'] == 'line' and p['y2']['series'][0]['x'] == 'x'
+
+
+def test_pattern_levels_and_alternation():
+    """花纹三档编号连续；列表按 name 轮换（RCWA 的斜线、反斜线交替）。"""
+    assert [style.PATTERNS[k] for k in ('diag_dense', 'diag', 'back_dense', 'back', 'vertical_sparse')] == [1, 2, 4, 5, 15]
+    st = style.encode([{'name': n} for n in 'ABCD'], palette='access', pattern=['diag_dense', 'back_dense'])
+    assert [s['pattern'] for s in st] == ['diag_dense', 'back_dense'] * 2
+
+
+def test_ref_frames_with_outward_ticks_at_corners():
+    """框角上朝外的刻度和框线连成一行时，左右边仍以竖线为准。"""
+    from PIL import Image, ImageDraw
+    from origin_cli import ref
+    im = Image.new('RGB', (400, 300), 'white')
+    d = ImageDraw.Draw(im)
+    d.rectangle([60, 40, 340, 250], outline='black', width=2)
+    d.line([45, 40, 60, 40], fill='black', width=2)        # 左上角朝外的刻度
+    d.line([340, 250, 355, 250], fill='black', width=2)    # 右下角朝外的刻度
+    (l, t, r, b), = ref.frames(im)
+    assert abs(l - 60) <= 2 and abs(r - 340) <= 2 and abs(t - 40) <= 2 and abs(b - 249) <= 2

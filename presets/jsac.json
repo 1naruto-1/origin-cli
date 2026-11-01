@@ -1,18 +1,18 @@
 {
   "extends": "paper",
-  "_note": "学自 Cao 等, IEEE JSAC 2021（Hybrid trusted/untrusted relay QKD）Fig.6–10 的矢量原图：Origin 出图，无衬线字体、刻度朝外、浅灰短虚线网格、带细框的单列图例放左上、亮色分类配色（颜色跟方法走，两组之间用实心小符号+短虚线 / 空心大符号+实线区分）、组名用大括号标在图例右侧、大数值用 ×10ⁿ。尺寸按印刷大小量得",
+  "_note": "学自 Cao 等, IEEE JSAC 2021（Hybrid trusted/untrusted relay QKD）Fig.6–10 的矢量原图：Origin 出图，无衬线字体、刻度朝内带一个次刻度、浅灰短虚线网格、带细框的单列图例放左上、亮色分类配色（颜色跟方法走，两组之间用实心小符号+短虚线 / 空心大符号+实线区分）、组名用大括号标在图例右侧、大数值用 ×10ⁿ。尺寸按印刷大小量得",
   "font": {"face": "Arial", "size": 6.4, "title": 7.2},
-  "axis": {"thickness": 0.5, "tick_length": 2.5, "tick_width": 0.5, "ticks": "out", "minor": 0,
+  "axis": {"thickness": 0.5, "tick_length": 2.2, "tick_width": 0.5, "ticks": "in", "minor": 1, "title_gap": 0.15,
            "grid": {"color": "#D0D3D4", "style": "short_dash", "width": 0.4}, "factor": "auto", "y_ticks": 7},
   "line": {"width": 0.6, "symbol": 2.5, "symbol_step": 1.5},
   "encode": {"color": "categorical", "palette": "jsac",
              "shapes": ["up", "down", "circle", "square", "diamond", "hexagon", "left", "right"],
              "dashes": ["short_dash", "solid", "short_dash_dot", "short_dot"]},
   "legend": {"size": 5.5, "min_size": 5, "margin": 0.08, "side_gap": 0.08, "clear": 0.05,
-             "symbol_width": 100, "tab": 2, "line_space": -10, "columns": 1, "layout": "brace",
+             "symbol_width": 100, "tab": 2, "line_space": 0, "columns": 1, "layout": "brace",
              "frame": {"color": "#231F20", "width": 0.4},
              "auto": ["top-left", "top-right", "bottom-right", "bottom-left"],
-             "brace": {"width": 0.08, "gap": 0.05, "size": 6.4, "line_width": 0.4}},
+             "brace": {"width": 0.08, "gap": 0.05, "size": 5.6, "line_width": 0.4}},
   "panel": {
     "line": {"frame": [5.07, 4.1], "margin": [1.0, 0.15, 0.25, 0.85]},
     "bar": {"frame": [5.07, 4.1], "margin": [1.0, 0.15, 0.25, 0.85]}

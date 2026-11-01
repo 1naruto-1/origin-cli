@@ -26,22 +26,24 @@ def _runs(line, min_len):
 
 
 def frames(im) -> list:
-    """找坐标框：上下两条横线与左右两条竖线围成的矩形（像素）。"""
+    """找坐标框：上下两条横线与左右两条竖线围成的矩形（像素）。
+    横线两端可能连着朝外的刻度（框角上的刻度与框线同一行），左右边以贯通上下的竖线为准。"""
     W, H = im.size
     px = im.load()
     dark = [[max(px[x, y]) < 100 for x in range(W)] for y in range(H)]
     hlines = [(y, a, b) for y in range(H) for a, b in _runs(dark[y], W // 6)]
     cols = [[dark[y][x] for y in range(H)] for x in range(W)]
-    vlines = {(x, a, b) for x in range(W) for a, b in _runs(cols[x], H // 8)}
+    vlines = [(x, a, b) for x in range(W) for a, b in _runs(cols[x], H // 8)]
     boxes = []
     for i, (y0, a0, b0) in enumerate(hlines):
         for y1, a1, b1 in hlines[i + 1:]:
-            if y1 - y0 < H // 10 or abs(a0 - a1) > 3 or abs(b0 - b1) > 3:
+            lo, hi = max(a0, a1), min(b0, b1)
+            if y1 - y0 < H // 10 or hi - lo < W // 6:
                 continue
-            left = any(abs(x - a0) <= 3 and va <= y0 + 3 and vb >= y1 - 3 for x, va, vb in vlines)
-            right = any(abs(x - b0) <= 3 and va <= y0 + 3 and vb >= y1 - 3 for x, va, vb in vlines)
-            if left and right and not any(abs(bx[0] - a0) <= 3 and abs(bx[1] - y0) <= 3 for bx in boxes):
-                boxes.append([a0, y0, b0, y1])
+            xs = [x for x, va, vb in vlines if lo - 3 <= x <= hi + 3 and va <= y0 + 3 and vb >= y1 - 3]
+            if xs and max(xs) - min(xs) >= W // 6:
+                if not any(abs(bx[0] - min(xs)) <= 3 and abs(bx[1] - y0) <= 3 for bx in boxes):
+                    boxes.append([min(xs), y0, max(xs), y1])
                 break
     return boxes
 

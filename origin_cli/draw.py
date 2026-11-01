@@ -21,6 +21,12 @@ def _ok(v):
     return isinstance(v, float) and v == v
 
 
+def _ticks(direction, minor):
+    """layer.x.ticks 的取值：主刻度 1 朝内、2 朝外；有次刻度时再加 4（朝内）或 8（朝外）。"""
+    major = {'in': 1, 'out': 2, 'none': 0}[direction]
+    return major + (major * 4 if minor and major else 0)
+
+
 def _to_frac(v, ax):
     """坐标值在轴上的位置（0–1），对数轴按对数算。"""
     a, b = ax['from'], ax['to']
@@ -186,8 +192,7 @@ class Figure:
         for k, (L, p, frame) in enumerate(zip(layers, spec['panels'], geo['frames'])):
             rep = {'index': k, 'type': p['type'], 'frame_cm': [round(v, 3) for v in frame]}
             rep.update(reports[k] if k in reports else self.xy_panel(L, k, p, frame))
-            for script in p.get('labtalk') or []:
-                L.lt_exec(script)
+            self.run_labtalk(L, p.get('labtalk'), f'面板 {k} 的')
             self.panels.append(rep)
         self.captions(layers, geo['frames'])
         self.s.lt('doc -uw;')
@@ -197,9 +202,14 @@ class Figure:
             # 加辅助曲线（椭圆等）后 Origin 刷新时会往图例补条目，最后恢复
             self.s.set_str('__t$', text)
             host.lt_exec('legend.text$ = __t$;')
-        for script in spec.get('labtalk') or []:
-            g.lt_exec(script)
+        self.run_labtalk(g, spec.get('labtalk'), '顶层')
         g.lt_exec('page -afu1;')
+
+    def run_labtalk(self, obj, scripts, where):
+        """执行 spec 里的 labtalk。Origin 只对不认识的命令报失败，写错的属性名会被静默忽略。"""
+        for n, script in enumerate(scripts or [], 1):
+            if not obj.obj.LT_execute(script):
+                self.warnings.append(f'{where} labtalk 第 {n} 条执行失败：{script[:80]}')
 
     def axis_room(self, p, key='y'):
         """纵轴刻度值比参考图的“0.95”宽或窄时，留白相应增减，页面边缘的空白保持不变。返回 (增减 cm, 数量级因子)。"""
@@ -209,10 +219,17 @@ class Figure:
             _, ya = self.auto_axes({'x': p['x'], 'y': p['y2']}, p['y2']['series'], p['table'], False)
         if ya.get('log'):
             return 0.0, None
-        n = int((ya['to'] - ya['first']) / ya['step'] + 1e-9) + 1
         k = 10 ** (ya.get('factor') or 0)
+        brk = p['y'].get('break') if key == 'y' else None
+        # 断轴时上下两段各按自己的刻度间距和位数算
+        segs = [(ya['first'], brk['from'] if brk else ya['to'], ya['step'], ya['decimals'])]
+        if brk:
+            up = brk.get('step') or ya['step']
+            segs.append((math.ceil(brk['to'] / up - 1e-9) * up, ya['to'], up,
+                         layout.decimals(round(up / k, 12)) if ya.get('auto_decimals') else ya['decimals']))
         em = lambda t: sum(0.25 if ch == '.' else 0.5 for ch in t)        # 数字约半个字宽
-        w = max(em(f'{(ya["first"] + j * ya["step"]) / k:.{ya["decimals"]}f}') for j in range(max(n, 1)))
+        w = max((em(f'{(a + j * s) / k:.{dec}f}') for a, b, s, dec in segs for j in range(int((b - a) / s + 1e-9) + 1)),
+                default=em('0.95'))
         return (w - em('0.95')) * self.st['font']['size'] * PT, ya.get('factor')
 
     # ---------- 点线 / 散点 / 柱状 ----------
@@ -235,7 +252,7 @@ class Figure:
                               group_order=enc.get('group_order', group_order), palette=enc.get('palette'),
                               shapes=enc.get('shapes'), dashes=enc.get('dashes'),
                               pattern=enc.get('pattern', st['bar'].get('pattern')) if bar else None)
-        styles, styles2 = styles[:len(series)], styles[len(series):]
+        styles, styles2 = styles[:len(series)], [dict(s, pattern='none') for s in styles[len(series):]]     # 右轴是线，没有花纹
         wks = op.new_sheet('w', lname=f'panel {i + 1}')
         cols = _unique([c for s in series + right for c in (s['x'], s['y'], s.get('yerr')) if c])
         labels = p['x'].get('labels')
@@ -254,8 +271,8 @@ class Figure:
         xa, ya = self.auto_axes(p, series, table, bar)
         self.axes(L, xa, ya, p)
         self.grid(L, p)
-        if bar:
-            L.lt_exec('layer.x.ticks=0;')          # 刻度在簇中央，会压在柱子的分界线上
+        if bar and st['axis']['ticks'] != 'out':
+            L.lt_exec('layer.x.ticks=0;')          # 朝内的刻度在簇中央，会压在柱子的分界线上；朝外的不会（RCWA 文献即朝外）
         self.factor_label(L, ya, frame, 'left')
         number = {k: pl.index() + 1 for k, pl in plots.items()}     # 曲线在图层里的序号（\l(n) 用），误差棒也占序号
         shapes = self.occupancy(p, series, styles, xa, bar)
@@ -268,6 +285,8 @@ class Figure:
                 shapes.append(('rect', sh[1], sh[2], to_left(sh[3]), to_left(sh[4])) if sh[0] == 'rect'
                               else ('line', sh[1], [to_left(v) for v in sh[2]], sh[3]))
             rep['y2'] = [ya2['from'], ya2['to']]
+            if y2.get('hint'):
+                shapes += self.y2_hint(L, p, right, ya, ya2)       # 图例避开虚线圈和箭头
         if not lg.get('show', True):
             L.lt_exec('label -r legend;')
         elif y2 and lg.get('layout', 'split') == 'split':
@@ -290,8 +309,6 @@ class Figure:
                     lt, rt = p['y'].get('title') or 'left', y2.get('title') or 'right'
                     leg = [dict(s, group=lt) for s in series] + [dict(s, group=rt) for s in right]
             rep['legend'] = self.legend(L, i, p, leg, number, frame, xa, ya, bar, shapes, fixed=bool(y2))
-        if y2 and y2.get('hint'):
-            self.y2_hint(L, p, right, ya, ya2)
         if p.get('inset'):
             rep['inset'] = self.inset(L, p, series, styles, frame, wks, idx)
         for mk in p.get('marks') or []:
@@ -325,7 +342,7 @@ class Figure:
         _, ya2 = self.auto_axes({'x': p['x'], 'y': y2}, right, p['table'], False)
         st, f = self.st, self.font
         ax = st['axis']
-        tk = {'in': 1, 'out': 2, 'none': 0}[ax['ticks']]
+        tk = _ticks(ax['ticks'], ax['minor'])
         R.lt_exec(f'layer.x.from={xa["from"]}; layer.x.to={xa["to"]}; layer.x.showAxes=0; layer.x.showLabels=0; '
                   f'layer.x.ticks=0; layer.x2.ticks=0; layer.tickL={ax["tick_length"]}; layer.tickW={ax["tick_width"]}; '
                   f'layer.y.from={ya2["from"]}; layer.y.to={ya2["to"]}; layer.y.inc={ya2["step"]}; '
@@ -346,20 +363,24 @@ class Figure:
         return R, plots, ya2
 
     def y2_hint(self, L, p, right, ya, ya2):
-        """虚线圈住右轴曲线的末端，再用箭头指向右纵轴（文献 RCWA Fig.5 的做法）。"""
+        """虚线圈住右轴曲线的末端，再用箭头指向右纵轴（文献 RCWA Fig.5 的做法）。返回两者的占位（左轴坐标），供图例避让。"""
         X0, X1, Y0, Y1 = self.ranges(L)
         ends = [pts[-1] for pts in (self.points(p['table'], s) for s in right) if pts]
         if not ends:
-            return
+            return []
         to_left = lambda v: _from_frac(_to_frac(v, ya2), ya)
         cx = max(x for x, _, _ in ends)
         ys = [to_left(y) for _, y, _ in ends]
-        rx, ry = 0.035 * (X1 - X0), (max(ys) - min(ys)) / 2 + 0.06 * (Y1 - Y0)
+        rx, ry = 0.035 * (X1 - X0), (max(ys) - min(ys)) / 2 + 0.03 * (Y1 - Y0)      # 上下余量约为原图的 3%
         cy = (max(ys) + min(ys)) / 2
         color = self.st['mark'].get('hint_color', '#E02020')
         self.mark(L, {'type': 'ellipse', 'center': [cx, cy], 'radius': [rx, ry], 'dash': 'dash', 'color': color,
                       'width': 0.5}, None)
-        self.segment(L, cx + rx, cy, X1, cy - 0.12 * (Y1 - Y0), color, 0.5, arrow=True)
+        arrow = (cx + rx, cy, X1, cy - 0.12 * (Y1 - Y0))
+        self.segment(L, *arrow, color, 0.5, arrow=True)
+        t = [2 * math.pi * k / 72 for k in range(73)]
+        return [('line', [cx + rx * math.cos(v) for v in t], [cy + ry * math.sin(v) for v in t], 0.03),
+                ('line', list(arrow[::2]), list(arrow[1::2]), 0.07)]
 
     def bar_order(self, p, series):
         """重叠柱（overlap）：同一 group 的柱并排成簇，各 group 之间重叠；先画均值大的 group（在后面）。"""
@@ -480,13 +501,16 @@ class Figure:
             fine = [d['step']] + ([user['break']['step']] if (user.get('break') or {}).get('step') else [])
             fac = user.get('factor', self.st['axis'].get('factor')) if a == 'y' else None
             if fac == 'auto':
-                # 数值上万时刻度值除以 10ⁿ，只留一两位整数（如 32 ×10⁵）
+                # 数值上千时刻度值除以 10ⁿ，只留一两位整数（如 28 ×10²、32 ×10⁵）
                 big = max(abs(d['from']), abs(d['to']))
-                fac = math.floor(math.log10(big)) - 1 if big >= 1e4 else None
+                fac = math.floor(math.log10(big)) - 1 if big >= 1e3 else None
             if fac:
                 d['factor'] = int(fac)
                 fine = [v / 10 ** fac for v in fine]
-            d['decimals'] = user.get('decimals', max(layout.decimals(round(v, 12)) for v in fine))
+            dec = [layout.decimals(round(v, 12)) for v in fine]
+            # 断轴上下两段刻度间距的位数不同（如 0.1 与 150）时，交给 Origin 按段自动定位数：0.0–0.8、150–900（JLT Fig.19）
+            d['auto_decimals'] = len(set(dec)) > 1 and 'decimals' not in user
+            d['decimals'] = user.get('decimals', dec[0] if d['auto_decimals'] else max(dec))
         brk = p['y'].get('break')
         if brk and 'at' not in brk:
             a, b = brk['from'] - ya['from'], ya['to'] - brk['to']
@@ -512,20 +536,21 @@ class Figure:
         ax = st['axis']
         title_size = title_size or size or st['font']['title']
         size = size or st['font']['size']
-        tk = {'in': 1, 'out': 2, 'none': 0}[ticks or ax['ticks']]
+        tk = _ticks(ticks or ax['ticks'], ax['minor'] if ticks is None else 0)     # 热图、色标指定了刻度，不加次刻度
         cmds = [f'layer.tickL={ax["tick_length"]}; layer.tickW={ax["tick_width"]};']
         for a, d in (('x', xa), ('y', ya)):
             cmds.append(f'layer.{a}.from={d["from"]}; layer.{a}.to={d["to"]}; layer.{a}.inc={d["step"]}; '
                         f'layer.{a}.firstTick={d["first"]}; layer.{a}.minorTicks={ax["minor"]}; layer.{a}.ticks={tk}; '
                         f'layer.{a}2.ticks=0; layer.{a}.showAxes=3; layer.{a}.showLabels=1; '
                         f'layer.{a}.label.font={f}; layer.{a}.label.pt={size}; layer.{a}.label.numFormat=1; '
-                        f'layer.{a}.label.decPlaces={d["decimals"]}; layer.{a}.thickness={ax["thickness"]}; '
+                        f'layer.{a}.label.decPlaces={-1 if d.get("auto_decimals") else d["decimals"]}; '
+                        f'layer.{a}.thickness={ax["thickness"]}; '
                         f'layer.{a}2.thickness={ax["thickness"]};')
         L.lt_exec(' '.join(cmds))
         for a, d in (('x', xa), ('y', ya)):
             if d.get('log'):
                 L.lt_exec(f'layer.{a}.type=2; layer.{a}.labelSubtype=2; layer.{a}.from={d["from"]}; layer.{a}.to={d["to"]}; '
-                          f'layer.{a}.inc=1; layer.{a}.firstTick={d["from"]};')
+                          f'layer.{a}.inc=1; layer.{a}.firstTick={d["from"]}; layer.{a}.minorTicks={8 if ax["minor"] else 0};')
         brk = p['y'].get('break')
         if brk:
             L.lt_exec(f'layer.y.breaks.enable=1; layer.y.breaks.count=1; layer.y.break1.from={brk["from"]}; '
@@ -536,6 +561,8 @@ class Figure:
             if title:
                 self.s.set_str('__t$', self.rich(title))
                 L.lt_exec(f'label -{obj} "x"; {obj}.text$ = __t$; {obj}.font={f}; {obj}.fsize={title_size};')
+                if a == 'y' and ax.get('title_gap'):
+                    L.lt_exec(f'doc -uw; {obj}.left = {obj}.left - {self.dots(ax["title_gap"])};')
             else:
                 L.lt_exec(f'label -r {obj};')
         L.lt_exec('label -r xt; label -r yr;')      # 模板里上、右轴的标题（框线显示后会冒出来）
